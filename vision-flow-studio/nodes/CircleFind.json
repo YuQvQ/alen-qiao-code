@@ -1,0 +1,31 @@
+{
+  "type_id": "CircleFind",
+  "display_name": "圆查找",
+  "category": "分析",
+  "icon": "icons/circle_find.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "CircleFind" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "叠加检测圆的结果图" },
+    { "name": "point", "type": "Pose2D", "required": true, "description": "圆心坐标(单个,angle=0)" },
+    { "name": "radius", "type": "Double", "required": true, "description": "圆半径" },
+    { "name": "count", "type": "Int", "required": true, "description": "找到的圆数量(0则NG)" }
+  ],
+  "parameters": [
+    { "name": "search_roi", "type": "Roi", "shape": "circle", "default": "", "description": "圆形搜索区[cx,cy,r],留空搜索整图" },
+    { "name": "target_radius", "type": "Int", "default": 0, "description": "目标半径(像素),告诉算法要找多大的圆,0=自动" },
+    { "name": "radius_tolerance", "type": "Double", "default": 0.2, "description": "半径容差比例(0.2=正负20%)" },
+    { "name": "polarity", "type": "Int", "default": 0, "description": "边缘极性:通过黑白交接方向找圆", "enum": [[0,"任意"],[1,"亮圆暗底"],[2,"暗圆亮底"]] },
+    { "name": "enable_binary", "type": "Int", "default": 1, "description": "二值化开关(polarity非0时生效):0=否,1=是", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "edge_threshold", "type": "Int", "default": 128, "description": "二值化阈值(0-255,区分亮暗区域)" },
+    { "name": "max_count", "type": "Int", "default": 1, "description": "最多找几个圆" },
+    { "name": "enable_blur", "type": "Int", "default": 1, "description": "高斯模糊(预处理):0=否,1=是", "enum": [[0,"否"],[1,"是"]] },
+    { "name": "blur_ksize", "type": "Int", "default": 5, "description": "高斯模糊核大小(奇数)" },
+    { "name": "dp", "type": "Double", "default": 1.0, "description": "累加器分辨率(高级)" },
+    { "name": "min_dist", "type": "Double", "default": 20.0, "description": "圆心最小距离(高级)" },
+    { "name": "param1", "type": "Double", "default": 100.0, "description": "Canny高阈值(高级)" },
+    { "name": "param2", "type": "Double", "default": 30.0, "description": "累加器阈值(越小检测越多)" }
+  ]
+}

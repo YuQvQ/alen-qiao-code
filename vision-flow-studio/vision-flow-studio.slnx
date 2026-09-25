@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VisionFlow.Studio/VisionFlow.Studio.csproj" />
+  </Folder>
+</Solution>

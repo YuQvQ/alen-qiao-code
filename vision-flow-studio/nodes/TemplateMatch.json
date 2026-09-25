@@ -1,0 +1,188 @@
+{
+  "type_id": "TemplateMatch",
+  "display_name": "模板匹配",
+  "category": "定位",
+  "icon": "icons/template_match.svg",
+  "algo_binding": {
+    "dll": "vision_algo",
+    "algo_name": "TemplateMatch"
+  },
+  "inputs": [
+    {
+      "name": "image",
+      "type": "Image",
+      "required": true,
+      "description": "待匹配的目标图像"
+    },
+    {
+      "name": "template",
+      "type": "Image",
+      "required": false,
+      "description": "模板图像（可选，留空时由用户在 UI 上 ROI 框选）"
+    },
+    {
+      "name": "region",
+      "type": "Region",
+      "required": false,
+      "description": "搜索区域掩码（可选）"
+    },
+    {
+      "name": "template_mask",
+      "type": "Image",
+      "required": false,
+      "description": "模板掩膜（255=有效像素, 0=排除像素，可选）"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "result_image",
+      "type": "Image",
+      "required": true,
+      "description": "带匹配框标注的结果图像"
+    },
+    {
+      "name": "debug_image",
+      "type": "Image",
+      "required": false,
+      "description": "预处理后的调试图像（灰度/二值），用于调参"
+    },
+    {
+      "name": "matches",
+      "type": "MatchResultList",
+      "required": true,
+      "description": "所有匹配结果列表"
+    },
+    {
+      "name": "centers",
+      "type": "Point2DList",
+      "required": true,
+      "description": "匹配中心点列表（二维点组）"
+    },
+    {
+      "name": "rects",
+      "type": "RectList",
+      "required": true,
+      "description": "匹配矩形列表（中心+宽高+角度）"
+    },
+    {
+      "name": "count",
+      "type": "Int",
+      "required": true,
+      "description": "匹配到的数量"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "threshold",
+      "type": "Double",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "description": "匹配置信度阈值（0~1）"
+    },
+    {
+      "name": "max_count",
+      "type": "Int",
+      "default": 1,
+      "min": 1,
+      "description": "最大匹配数量"
+    },
+    {
+      "name": "angle_range",
+      "type": "DoubleRange",
+      "default": [-5.0, 5.0],
+      "description": "角度搜索范围（度），多角度遍历搜索"
+    },
+    {
+      "name": "angle_step",
+      "type": "Double",
+      "default": 5.0,
+      "description": "角度搜索步长（度）"
+    },
+    {
+      "name": "scale_range",
+      "type": "DoubleRange",
+      "default": [0.95, 1.05],
+      "description": "缩放搜索范围"
+    },
+    {
+      "name": "scale_step",
+      "type": "Double",
+      "default": 0.05,
+      "description": "缩放搜索步长"
+    },
+    {
+      "name": "pyramid_levels",
+      "type": "Int",
+      "default": 3,
+      "min": 0,
+      "max": 4,
+      "description": "图像金字塔层数（0=不使用金字塔，加速搜索）"
+    },
+    {
+      "name": "nms_overlap",
+      "type": "Double",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "description": "NMS 非极大值抑制 IoU 阈值（去除重叠匹配）"
+    },
+    {
+      "name": "subpixel",
+      "type": "Int",
+      "default": 1,
+      "description": "子像素精度（抛物线拟合）",
+      "enum": [[0, "否"], [1, "是"]]
+    },
+    {
+      "name": "enable_binary",
+      "type": "Int",
+      "default": 0,
+      "description": "二值化预处理（0=关闭，1=开启）",
+      "enum": [[0, "否"], [1, "是"]]
+    },
+    {
+      "name": "binary_threshold",
+      "type": "Int",
+      "default": 128,
+      "min": 0,
+      "max": 255,
+      "description": "二值化阈值（仅在 enable_binary=1 时有效）"
+    },
+    {
+      "name": "refine_boundary",
+      "type": "Int",
+      "default": 1,
+      "description": "边缘检测精化边界（用灰度阈值找目标实际边界）",
+      "enum": [[0, "否"], [1, "是"]]
+    },
+    {
+      "name": "display_mode",
+      "type": "Int",
+      "default": 0,
+      "description": "结果图显示模式",
+      "enum": [[0, "检测结果"], [1, "预处理灰度图"], [2, "预处理二值图"]]
+    },
+    {
+      "name": "template_roi",
+      "type": "Roi",
+      "shape": "rect",
+      "default": "",
+      "description": "模板 ROI [x,y,w,h] 或 [cx,cy,w,h,angle]；留空表示使用 template 端口的输入"
+    },
+    {
+      "name": "search_roi",
+      "type": "Roi",
+      "shape": "rect",
+      "default": "",
+      "description": "搜索区 ROI [x,y,w,h]；留空则搜索整图"
+    },
+    {
+      "name": "search_circle_roi",
+      "type": "Roi",
+      "shape": "circle",
+      "default": "",
+      "description": "拟合圆搜索区 [cx,cy,radius]；留空则用 search_roi 或整图"
+    }
+  ]
+}

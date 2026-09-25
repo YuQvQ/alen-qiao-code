@@ -1,0 +1,28 @@
+{
+  "type_id": "DnnClassify",
+  "display_name": "深度学习-分类",
+  "category": "深度学习",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "DnnClassify" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图" },
+    { "name": "class_id", "type": "Int", "required": true, "description": "类别ID" },
+    { "name": "confidence", "type": "Double", "required": true, "description": "置信度" },
+    { "name": "label", "type": "String", "required": true, "description": "类别名" }
+  ],
+  "parameters": [
+    { "name": "model", "type": "String", "default": "", "description": "模型路径" },
+    { "name": "config", "type": "String", "default": "", "description": "配置文件(可选)" },
+    { "name": "framework", "type": "Int", "default": 0, "description": "框架", "enum": [[0, "自动"], [1, "Caffe"], [2, "TensorFlow"], [3, "Darknet"], [4, "Torch"], [5, "ONNX"]] },
+    { "name": "input_w", "type": "Int", "default": 224, "description": "输入宽" },
+    { "name": "input_h", "type": "Int", "default": 224, "description": "输入高" },
+    { "name": "scale", "type": "Double", "default": 1.0, "description": "像素缩放" },
+    { "name": "mean_r", "type": "Double", "default": 0, "description": "均值R" },
+    { "name": "mean_g", "type": "Double", "default": 0, "description": "均值G" },
+    { "name": "mean_b", "type": "Double", "default": 0, "description": "均值B" },
+    { "name": "swap_rb", "type": "Int", "default": 1, "description": "RGB<->BGR", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "crop", "type": "Int", "default": 0, "description": "中心裁剪", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "labels", "type": "String", "default": "", "description": "标签文件路径" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "文字颜色" }
+  ]
+}

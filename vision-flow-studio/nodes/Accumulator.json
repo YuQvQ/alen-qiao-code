@@ -1,0 +1,16 @@
+{
+  "type_id": "Accumulator",
+  "display_name": "累加器",
+  "category": "逻辑",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "Accumulator" },
+  "inputs": [
+    { "name": "value", "type": "Double", "required": false, "description": "待累加值" },
+    { "name": "reset", "type": "Int", "required": false, "description": "复位(非零清零)" }
+  ],
+  "outputs": [
+    { "name": "sum", "type": "Double", "required": true, "description": "累加和" },
+    { "name": "count", "type": "Int", "required": true, "description": "次数" },
+    { "name": "average", "type": "Double", "required": true, "description": "平均值" }
+  ],
+  "parameters": []
+}

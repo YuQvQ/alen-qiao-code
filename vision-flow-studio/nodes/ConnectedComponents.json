@@ -1,0 +1,12 @@
+{
+  "type_id": "ConnectedComponents",
+  "display_name": "连通域统计",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConnectedComponents" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "伪彩色标注图" },
+    { "name": "count", "type": "Int", "required": true, "description": "连通域数量" }
+  ],
+  "parameters": []
+}

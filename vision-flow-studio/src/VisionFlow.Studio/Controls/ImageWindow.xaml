@@ -1,0 +1,115 @@
+<UserControl x:Class="VisionFlow.Studio.Controls.ImageWindow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:VisionFlow.Studio.Controls">
+    <DockPanel Background="#1E1E1E" LastChildFill="True">
+        <!-- 图像窗口标题栏 -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceMutedBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,4">
+            <DockPanel>
+                <TextBlock Text="图像查看" FontWeight="SemiBold" FontSize="12"
+                           VerticalAlignment="Center" />
+                <!-- 右侧按钮组 -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <TextBlock x:Name="ImageInfoText" Text="(无图像)"
+                               VerticalAlignment="Center" Margin="0,0,12,0"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="11" />
+                    <Button x:Name="BtnFit" Content="适应" Padding="6,1"
+                            Margin="0,0,4,0" Click="BtnFit_Click" ToolTip="缩放以适应窗口" />
+                    <Button x:Name="BtnActualSize" Content="1:1" Padding="6,1"
+                            Margin="0,0,4,0" Click="BtnActualSize_Click" ToolTip="原始尺寸" />
+                    <Button x:Name="BtnClearImage" Content="清除" Padding="6,1"
+                            Click="BtnClearImage_Click" ToolTip="清除图像" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ROI 工具栏（仅当 ActiveNode 有 Roi 参数时显示） -->
+        <Border x:Name="RoiToolbarHost" DockPanel.Dock="Top"
+                Background="{StaticResource SurfaceMutedBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="8,3" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="ROI 工具：" FontWeight="SemiBold" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Button x:Name="BtnDrawRect" Content="□ 矩形" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnDrawRect_Click"
+                        ToolTip="在图像上拖拽绘制矩形 ROI" />
+                <Button x:Name="BtnDrawRotRect" Content="◇ 旋转矩形" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnDrawRotRect_Click"
+                        ToolTip="在图像上拖拽绘制带角度的矩形 ROI" />
+                <Button x:Name="BtnDrawCircle" Content="○ 圆形" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnDrawCircle_Click"
+                        ToolTip="在图像上拖拽绘制圆形 ROI" />
+                <Button x:Name="BtnClearRoi" Content="清除ROI" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnClearRoi_Click"
+                        ToolTip="清除当前选中节点的所有 ROI 参数" />
+                <TextBlock x:Name="RoiModeText" Text="" FontSize="11"
+                           Foreground="Orange" VerticalAlignment="Center"
+                           Margin="8,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- 模板工具栏（仅当 ActiveNode 是 TemplateMatch 时显示） -->
+        <Border x:Name="TemplateToolbarHost" DockPanel.Dock="Top"
+                Background="{StaticResource SurfaceMutedBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="8,3" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="模板：" FontWeight="SemiBold" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Button x:Name="BtnNewTemplate" Content="新建模板" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnNewTemplate_Click"
+                        ToolTip="在图像上框选矩形区域生成模板" />
+                <Button x:Name="BtnImportTemplate" Content="导入模板" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnImportTemplate_Click"
+                        ToolTip="从 .tpl 文件加载模板" />
+                <Button x:Name="BtnExportTemplate" Content="导出模板" Padding="6,1"
+                        Margin="0,0,4,0" Click="BtnExportTemplate_Click"
+                        ToolTip="把当前模板保存为 .tpl 文件" />
+            </StackPanel>
+        </Border>
+
+        <!-- 底部状态栏：鼠标位置 + 坐标 + 灰度值 -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource SurfaceMutedBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="8,2">
+            <DockPanel>
+                <TextBlock x:Name="PixelInfoText" Text="X=0, Y=0, Gray=—"
+                           FontFamily="Consolas" FontSize="11"
+                           Foreground="{StaticResource TextMainBrush}"
+                           VerticalAlignment="Center" />
+                <TextBlock x:Name="ZoomInfoText" Text="100%" DockPanel.Dock="Right"
+                           HorizontalAlignment="Right"
+                           FontFamily="Consolas" FontSize="11"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <!-- 图像显示区：Grid(ClipToBounds) + Canvas(无限空间) + ImageGrid(TranslateTransform 平移)
+             Canvas 给子元素无限布局空间，ImageGrid 可以是任意尺寸（放大后不裁剪），
+             ClipToBounds 裁剪到视口，TranslateTransform 平移可以看到图像的任何部分。
+             缩放通过 ImageView.Width/Height = pixelW*scale 实现（避免大图超出 GPU 纹理限制） -->
+        <Grid x:Name="ImageArea" Background="#2D2D30" ClipToBounds="True"
+              MouseWheel="OnImageMouseWheel"
+              MouseLeftButtonDown="OnImageAreaLeftDown"
+              MouseLeftButtonUp="OnImageAreaLeftUp"
+              MouseMove="OnImageAreaMouseMove"
+              MouseLeave="OnImageAreaMouseLeave">
+            <Canvas Background="Transparent">
+                <Grid x:Name="ImageGrid" RenderTransformOrigin="0,0">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="ImgTranslate" X="0" Y="0"/>
+                    </Grid.RenderTransform>
+                    <Image x:Name="ImageView" Stretch="Fill"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                    <Canvas x:Name="RoiCanvas"
+                            IsHitTestVisible="True"
+                            Background="Transparent"
+                            ClipToBounds="False"/>
+                </Grid>
+            </Canvas>
+        </Grid>
+    </DockPanel>
+</UserControl>

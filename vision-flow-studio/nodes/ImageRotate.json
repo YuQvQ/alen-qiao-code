@@ -1,0 +1,13 @@
+{
+  "type_id": "ImageRotate",
+  "display_name": "图像旋转",
+  "category": "几何",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ImageRotate" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "旋转后图像" }],
+  "parameters": [
+    { "name": "angle", "type": "Double", "default": 0.0, "description": "角度(度,正=逆时针)" },
+    { "name": "scale", "type": "Double", "default": 1.0, "description": "缩放" },
+    { "name": "expand", "type": "Int", "default": 1, "description": "画布", "enum": [[0, "保持原尺寸"], [1, "扩展画布"]] }
+  ]
+}

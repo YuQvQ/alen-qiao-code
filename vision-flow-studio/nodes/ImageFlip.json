@@ -1,0 +1,11 @@
+{
+  "type_id": "ImageFlip",
+  "display_name": "图像翻转",
+  "category": "几何",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ImageFlip" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "翻转后图像" }],
+  "parameters": [
+    { "name": "flip_code", "type": "Int", "default": 1, "description": "翻转方向", "enum": [[0, "垂直(上下)"], [1, "水平(左右)"], [-1, "水平+垂直"]] }
+  ]
+}

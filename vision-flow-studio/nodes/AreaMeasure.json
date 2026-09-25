@@ -1,0 +1,12 @@
+{
+  "type_id": "AreaMeasure",
+  "display_name": "面积测量",
+  "category": "测量",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "AreaMeasure" },
+  "inputs": [{ "name": "points", "type": "Point2DList", "required": true, "description": "多边形顶点(>=3)" }],
+  "outputs": [
+    { "name": "area", "type": "Double", "required": true, "description": "面积(像素²)" },
+    { "name": "perimeter", "type": "Double", "required": true, "description": "周长(像素)" }
+  ],
+  "parameters": []
+}

@@ -1,0 +1,47 @@
+{
+  "type_id": "CameraSource",
+  "display_name": "海康相机",
+  "category": "源",
+  "icon": "icons/camera_source.svg",
+  "algo_binding": {
+    "dll": "vision_algo",
+    "algo_name": "CameraSource"
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "name": "image",
+      "type": "Image",
+      "required": true,
+      "description": "采集到的图像"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "device_sn",
+      "type": "String",
+      "default": "",
+      "description": "设备序列号（MVS SDK 模式下生效）"
+    },
+    {
+      "name": "exposure",
+      "type": "Double",
+      "default": 10000.0,
+      "min": 0,
+      "description": "曝光（微秒）"
+    },
+    {
+      "name": "gain",
+      "type": "Double",
+      "default": 0.0,
+      "min": 0,
+      "description": "增益（dB）"
+    },
+    {
+      "name": "mode",
+      "type": "String",
+      "default": "stub",
+      "description": "stub=测试图 / real=真实采集（需 MVS SDK）"
+    }
+  ]
+}

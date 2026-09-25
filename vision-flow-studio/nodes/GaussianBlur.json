@@ -1,0 +1,12 @@
+{
+  "type_id": "GaussianBlur",
+  "display_name": "高斯模糊",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "GaussianBlur" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "模糊后图像" }],
+  "parameters": [
+    { "name": "ksize", "type": "Int", "default": 5, "description": "核大小(奇数)" },
+    { "name": "sigma", "type": "Double", "default": 0.0, "description": "标准差(0=自动)" }
+  ]
+}

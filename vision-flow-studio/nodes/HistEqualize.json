@@ -1,0 +1,9 @@
+{
+  "type_id": "HistEqualize",
+  "display_name": "直方图均衡",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "HistEqualize" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "增强后图像" }],
+  "parameters": []
+}

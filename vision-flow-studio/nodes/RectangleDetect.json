@@ -1,0 +1,32 @@
+{
+  "type_id": "RectangleDetect",
+  "display_name": "矩形检测",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "RectangleDetect" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "叠加检测矩形的结果图" },
+    { "name": "corners", "type": "Point2DList", "required": true, "description": "矩形4个角点(顺时针)" },
+    { "name": "center", "type": "Pose2D", "required": true, "description": "矩形中心+角度" },
+    { "name": "width", "type": "Double", "required": true, "description": "矩形宽(像素)" },
+    { "name": "height", "type": "Double", "required": true, "description": "矩形高(像素)" },
+    { "name": "count", "type": "Int", "required": true, "description": "检测到的矩形数量" }
+  ],
+  "parameters": [
+    { "name": "search_roi", "type": "Roi", "default": "", "description": "搜索区" },
+    { "name": "polarity", "type": "Int", "default": 0, "description": "目标极性", "enum": [[0, "自动"], [1, "亮目标"], [2, "暗目标"]] },
+    { "name": "min_area", "type": "Double", "default": 100.0, "description": "最小面积(像素)" },
+    { "name": "max_area_ratio", "type": "Double", "default": 0.95, "description": "最大面积占比(0-1)" },
+    { "name": "approx_eps", "type": "Double", "default": 0.02, "description": "多边形近似精度" },
+    { "name": "equalize_hist", "type": "Int", "default": 1, "description": "直方图均衡化", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "enable_blur", "type": "Int", "default": 1, "description": "高斯模糊", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "gaussian_ksize", "type": "Int", "default": 3, "description": "高斯核大小(奇数)" },
+    { "name": "enable_binary", "type": "Int", "default": 1, "description": "二值化开关", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "bin_threshold", "type": "Double", "default": 128.0, "description": "二值化阈值" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "矩形绘制颜色(#RRGGBB 或 B,G,R)" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "min": 1, "max": 20, "description": "线宽(1-20)" },
+    { "name": "point_size", "type": "Int", "default": 5, "min": 1, "max": 50, "description": "角点标记半径(1-50)" }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "type_id": "BinThreshold",
+  "display_name": "二值化",
+  "category": "预处理",
+  "icon": "icons/bin_threshold.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "BinThreshold" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "image", "type": "Image", "description": "二值图" }
+  ],
+  "parameters": [
+    { "name": "threshold", "type": "Int", "default": 128, "min": 0, "max": 255, "description": "阈值" },
+    { "name": "max_value", "type": "Int", "default": 255, "min": 0, "max": 255, "description": "二值化最大值" },
+    { "name": "mode", "type": "String", "default": "binary", "description": "binary/binary_inv/trunc/tozero/tozero_inv/otsu/adaptive" },
+    { "name": "adaptive_block_size", "type": "Int", "default": 11, "description": "自适应阈值块大小(奇数)" },
+    { "name": "adaptive_c", "type": "Double", "default": 2.0, "description": "自适应阈值常数C" }
+  ]
+}

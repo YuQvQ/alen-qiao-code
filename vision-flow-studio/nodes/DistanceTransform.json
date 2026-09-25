@@ -1,0 +1,12 @@
+{
+  "type_id": "DistanceTransform",
+  "display_name": "距离变换",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "DistanceTransform" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入二值/灰度图" }],
+  "outputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "距离归一化灰度图" },
+    { "name": "max_distance", "type": "Double", "required": true, "description": "最大距离(像素)" }
+  ],
+  "parameters": [{ "name": "mask_size", "type": "Int", "default": 5, "description": "掩膜尺寸(0/3/5)" }]
+}

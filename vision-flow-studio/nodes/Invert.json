@@ -1,0 +1,9 @@
+{
+  "type_id": "Invert",
+  "display_name": "图像反色",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "Invert" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "反色后图像" }],
+  "parameters": []
+}

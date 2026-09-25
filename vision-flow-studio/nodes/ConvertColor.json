@@ -1,0 +1,11 @@
+{
+  "type_id": "ConvertColor",
+  "display_name": "颜色转换",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConvertColor" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "转换后图像" }],
+  "parameters": [
+    { "name": "code", "type": "Int", "default": 0, "description": "转换方向", "enum": [[0, "BGR->灰度"], [1, "BGR->HSV"], [2, "BGR->RGB"], [3, "BGR->Lab"], [4, "BGR->YCrCb"], [5, "HSV->BGR"], [6, "RGB->BGR"], [7, "灰度->BGR"]] }
+  ]
+}

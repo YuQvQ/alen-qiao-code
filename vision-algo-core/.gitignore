@@ -1,0 +1,35 @@
+# 构建产物
+build/
+out/
+bin/
+lib/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakePresets.json.user
+
+# MSVC
+*.pdb
+*.ilk
+*.exp
+*.obj
+*.lib
+*.dll
+
+# 调试
+.vs/
+*.user
+*.suo
+*.opensdf
+*.sdf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db

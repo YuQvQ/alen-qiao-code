@@ -1,0 +1,12 @@
+{
+  "type_id": "Counter",
+  "display_name": "计数器",
+  "category": "逻辑",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "Counter" },
+  "inputs": [{ "name": "reset", "type": "Int", "required": false, "description": "复位信号(非零复位)" }],
+  "outputs": [{ "name": "count", "type": "Int", "required": true, "description": "当前计数值" }],
+  "parameters": [
+    { "name": "initial", "type": "Int", "default": 0, "description": "初始值" },
+    { "name": "step", "type": "Int", "default": 1, "description": "步长" }
+  ]
+}

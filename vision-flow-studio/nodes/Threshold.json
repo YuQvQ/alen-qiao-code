@@ -1,0 +1,13 @@
+{
+  "type_id": "Threshold",
+  "display_name": "阈值二值化",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "Threshold" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "二值图" }],
+  "parameters": [
+    { "name": "thresh", "type": "Double", "default": 128.0, "description": "阈值" },
+    { "name": "maxval", "type": "Double", "default": 255.0, "description": "最大值" },
+    { "name": "type", "type": "Int", "default": 0, "description": "类型", "enum": [[0, "Binary"], [1, "BinaryInv"], [2, "Trunc"], [3, "ToZero"], [4, "Otsu自动"]] }
+  ]
+}

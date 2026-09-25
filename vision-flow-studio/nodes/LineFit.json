@@ -1,0 +1,19 @@
+{
+  "type_id": "LineFit",
+  "display_name": "直线拟合",
+  "category": "对位",
+  "icon": "icons/line_fit.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "LineFit" },
+  "inputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "输入点集" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选,用于绘制)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图(绿色=拟合直线,红色=输入点,青色=中心点)" },
+    { "name": "angle", "type": "Double", "required": true, "description": "直线角度(度)" },
+    { "name": "intercept", "type": "Double", "required": true, "description": "Y轴截距" },
+    { "name": "point", "type": "Pose2D", "required": true, "description": "直线中心点+角度" },
+    { "name": "residuals", "type": "Double", "required": true, "description": "拟合残差(RMS)" }
+  ],
+  "parameters": []
+}

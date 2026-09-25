@@ -1,0 +1,30 @@
+{
+  "type_id": "LineFind",
+  "display_name": "直线查找",
+  "category": "分析",
+  "icon": "icons/line_find.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "LineFind" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "叠加检测直线的结果图" },
+    { "name": "lines", "type": "Point2DList", "required": true, "description": "直线端点对(每条直线2个点)" },
+    { "name": "count", "type": "Int", "required": true, "description": "找到的直线数量(0则NG)" }
+  ],
+  "parameters": [
+    { "name": "search_roi", "type": "Roi", "shape": "rotated_rect", "default": "", "description": "搜索区[cx,cy,w,h,angle]" },
+    { "name": "polarity", "type": "Int", "default": 0, "description": "搜索方向", "enum": [[0,"任意"],[1,"白到黑"],[2,"黑到白"]] },
+    { "name": "edge_method", "type": "Int", "default": 0, "description": "边缘检测方法", "enum": [[0,"Canny"],[1,"Sobel"]] },
+    { "name": "equalize_hist", "type": "Int", "default": 1, "description": "直方图均衡化(预处理)", "enum": [[0,"否"],[1,"是"]] },
+    { "name": "enable_blur", "type": "Int", "default": 1, "description": "高斯模糊(预处理)", "enum": [[0,"否"],[1,"是"]] },
+    { "name": "gaussian_ksize", "type": "Int", "default": 3, "description": "高斯模糊核大小(奇数)" },
+    { "name": "canny_low", "type": "Double", "default": 50.0, "description": "Canny低阈值(0-255)" },
+    { "name": "canny_high", "type": "Double", "default": 150.0, "description": "Canny高阈值(0-255)" },
+    { "name": "enable_binary", "type": "Int", "default": 1, "description": "二值化开关(polarity非0时生效):0=否,1=是", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "bin_threshold", "type": "Double", "default": 128.0, "description": "二值化阈值(用于方向搜索,0-255)" },
+    { "name": "hough_threshold", "type": "Int", "default": 15, "description": "霍夫累加器阈值(越小越易检出)" },
+    { "name": "min_line_length", "type": "Double", "default": 30.0, "description": "最小直线长度(像素)" },
+    { "name": "max_line_gap", "type": "Double", "default": 10.0, "description": "最大间隙(像素)" }
+  ]
+}

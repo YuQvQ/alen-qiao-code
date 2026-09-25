@@ -1,0 +1,14 @@
+{
+  "type_id": "CannyEdge",
+  "display_name": "Canny边缘",
+  "category": "边缘",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "CannyEdge" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "边缘二值图" }],
+  "parameters": [
+    { "name": "low_threshold", "type": "Double", "default": 50.0, "description": "低阈值" },
+    { "name": "high_threshold", "type": "Double", "default": 150.0, "description": "高阈值" },
+    { "name": "aperture", "type": "Int", "default": 3, "description": "Sobel核(3,5,7)" },
+    { "name": "l2_gradient", "type": "Int", "default": 0, "description": "L2梯度", "enum": [[0, "否"], [1, "是"]] }
+  ]
+}

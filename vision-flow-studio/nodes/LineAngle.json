@@ -1,0 +1,22 @@
+{
+  "type_id": "LineAngle",
+  "display_name": "线线角度",
+  "category": "对位",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "LineAngle" },
+  "inputs": [
+    { "name": "line_a", "type": "Point2DList", "required": true, "description": "直线A(2个端点,绘制为绿色)" },
+    { "name": "line_b", "type": "Point2DList", "required": true, "description": "直线B(2个端点,绘制为蓝色)" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选,用于绘制叠加)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图(绘制两线与角度弧)" },
+    { "name": "angle", "type": "Double", "required": true, "description": "两线夹角(度)" },
+    { "name": "intersection", "type": "Point2DList", "required": true, "description": "角度顶点(两线交点)" }
+  ],
+  "parameters": [
+    { "name": "angle_mode", "type": "Int", "default": 0, "description": "角度模式", "enum": [[0, "绝对角(0-90)"], [1, "有向角(-180~180)"]] },
+    { "name": "draw_color", "type": "String", "default": "#FFFF00", "description": "角度弧/顶点颜色(#RRGGBB 或 B,G,R)" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "min": 1, "max": 20, "description": "线宽(1-20)" },
+    { "name": "point_size", "type": "Int", "default": 6, "min": 1, "max": 50, "description": "顶点标记半径(1-50)" }
+  ]
+}

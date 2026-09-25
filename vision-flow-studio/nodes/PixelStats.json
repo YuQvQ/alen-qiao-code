@@ -1,0 +1,21 @@
+{
+  "type_id": "PixelStats",
+  "display_name": "像素统计",
+  "category": "分析",
+  "icon": "icons/pixel_stats.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "PixelStats" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图" },
+    { "name": "mean", "type": "Double", "required": true, "description": "灰度均值" },
+    { "name": "stddev", "type": "Double", "required": true, "description": "灰度标准差" },
+    { "name": "min_val", "type": "Double", "required": true, "description": "最小值" },
+    { "name": "max_val", "type": "Double", "required": true, "description": "最大值" },
+    { "name": "count", "type": "Int", "required": true, "description": "像素数" }
+  ],
+  "parameters": [
+    { "name": "roi", "type": "Roi", "shape": "rect", "default": "", "description": "ROI[x,y,w,h]" }
+  ]
+}

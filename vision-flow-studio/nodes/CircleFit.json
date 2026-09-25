@@ -1,0 +1,19 @@
+{
+  "type_id": "CircleFit",
+  "display_name": "圆拟合",
+  "category": "对位",
+  "icon": "icons/circle_fit.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "CircleFit" },
+  "inputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "输入点集" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选,用于绘制)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图(绿色=拟合圆,红色=圆心,黄色=输入点)" },
+    { "name": "center", "type": "Pose2D", "required": true, "description": "拟合圆心" },
+    { "name": "radius", "type": "Double", "required": true, "description": "拟合半径" },
+    { "name": "residuals", "type": "Double", "required": true, "description": "拟合残差(RMS)" },
+    { "name": "count", "type": "Int", "required": true, "description": "参与拟合的点数" }
+  ],
+  "parameters": []
+}

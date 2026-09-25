@@ -1,0 +1,25 @@
+{
+  "type_id": "ColorDetect",
+  "display_name": "颜色检测",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ColorDetect" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "绘制色块的结果图" },
+    { "name": "center", "type": "Pose2D", "required": true, "description": "最大色块中心" },
+    { "name": "area", "type": "Double", "required": true, "description": "最大色块面积" },
+    { "name": "count", "type": "Int", "required": true, "description": "色块数量" }
+  ],
+  "parameters": [
+    { "name": "h_min", "type": "Int", "default": 0, "description": "H下限" },
+    { "name": "h_max", "type": "Int", "default": 10, "description": "H上限" },
+    { "name": "s_min", "type": "Int", "default": 100, "description": "S下限" },
+    { "name": "s_max", "type": "Int", "default": 255, "description": "S上限" },
+    { "name": "v_min", "type": "Int", "default": 100, "description": "V下限" },
+    { "name": "v_max", "type": "Int", "default": 255, "description": "V上限" },
+    { "name": "min_area", "type": "Double", "default": 100.0, "description": "最小面积" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "绘制颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" },
+    { "name": "point_size", "type": "Int", "default": 5, "description": "中心标记半径" }
+  ]
+}

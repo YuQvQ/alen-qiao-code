@@ -1,0 +1,17 @@
+{
+  "type_id": "IndexSelector",
+  "display_name": "索引选择器",
+  "category": "工具",
+  "icon": "icons/index_selector.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "IndexSelector" },
+  "inputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "点组" },
+    { "name": "index", "type": "Int", "required": false, "description": "索引(0基,未连线时用参数default_index)" }
+  ],
+  "outputs": [
+    { "name": "point", "type": "Pose2D", "required": true, "description": "Points[index]单个点(angle=0)" }
+  ],
+  "parameters": [
+    { "name": "default_index", "type": "Int", "default": 0, "description": "默认索引(端口未连线时使用)" }
+  ]
+}

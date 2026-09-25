@@ -1,0 +1,17 @@
+{
+  "type_id": "DistanceMeasure",
+  "display_name": "距离测量",
+  "category": "对位",
+  "icon": "icons/distance_measure.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "DistanceMeasure" },
+  "inputs": [
+    { "name": "a", "type": "Pose2D", "required": true, "description": "点A" },
+    { "name": "b", "type": "Pose2D", "required": true, "description": "点B" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选,用于绘制)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图(绿色=连线,红=A,蓝=B)" },
+    { "name": "distance", "type": "Double", "required": true, "description": "两点距离(像素)" }
+  ],
+  "parameters": []
+}

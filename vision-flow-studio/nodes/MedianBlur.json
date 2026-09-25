@@ -1,0 +1,9 @@
+{
+  "type_id": "MedianBlur",
+  "display_name": "中值滤波",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "MedianBlur" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "滤波后图像" }],
+  "parameters": [{ "name": "ksize", "type": "Int", "default": 5, "description": "核大小(奇数)" }]
+}

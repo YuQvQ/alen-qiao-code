@@ -1,0 +1,20 @@
+{
+  "type_id": "ConvexHull",
+  "display_name": "凸包",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConvexHull" },
+  "inputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "输入点集" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "绘制凸包的结果图" },
+    { "name": "hull", "type": "Point2DList", "required": true, "description": "凸包顶点" },
+    { "name": "area", "type": "Double", "required": true, "description": "凸包面积" }
+  ],
+  "parameters": [
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" },
+    { "name": "point_size", "type": "Int", "default": 3, "description": "顶点半径" }
+  ]
+}

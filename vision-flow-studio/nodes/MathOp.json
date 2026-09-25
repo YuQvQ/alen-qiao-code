@@ -1,0 +1,16 @@
+{
+  "type_id": "MathOp",
+  "display_name": "数学运算",
+  "category": "数学",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "MathOp" },
+  "inputs": [
+    { "name": "a", "type": "Double", "required": false, "description": "操作数A" },
+    { "name": "b", "type": "Double", "required": false, "description": "操作数B" }
+  ],
+  "outputs": [{ "name": "result", "type": "Double", "required": true, "description": "运算结果" }],
+  "parameters": [
+    { "name": "op", "type": "Int", "default": 0, "description": "运算符", "enum": [[0, "a+b 加"], [1, "a-b 减"], [2, "a*b 乘"], [3, "a/b 除"], [4, "a%b 取余"], [5, "a^b 幂"], [6, "min(a,b)"], [7, "max(a,b)"]] },
+    { "name": "a", "type": "Double", "default": 0.0, "description": "操作数A" },
+    { "name": "b", "type": "Double", "default": 0.0, "description": "操作数B" }
+  ]
+}

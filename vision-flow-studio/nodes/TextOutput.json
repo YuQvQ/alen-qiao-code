@@ -1,0 +1,17 @@
+{
+  "type_id": "TextOutput",
+  "display_name": "文本输出",
+  "category": "工具",
+  "icon": "icons/text_output.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "TextOutput" },
+  "inputs": [
+    { "name": "value", "type": "String", "required": false, "description": "输入文本" }
+  ],
+  "outputs": [
+    { "name": "text", "type": "String", "description": "输出文本" }
+  ],
+  "parameters": [
+    { "name": "prefix", "type": "String", "default": "", "description": "前缀" },
+    { "name": "suffix", "type": "String", "default": "", "description": "后缀" }
+  ]
+}

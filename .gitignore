@@ -1,0 +1,69 @@
+# =========================
+# Build outputs
+# =========================
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+out/
+artifacts/
+publish/
+
+# CMake / C++ build
+vision-algo-core/build/
+build/
+cmake-build-*/
+*.obj
+*.o
+*.a
+*.lib
+*.exp
+*.pdb
+*.idb
+*.ipdb
+*.iobj
+*.recipe
+
+# =========================
+# IDE / editor
+# =========================
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.dtbcache*
+*.futdcache*
+*.db
+
+# Trae local
+.trae/
+
+# =========================
+# Logs, dumps, runtime data
+# =========================
+log/
+logs/
+*.log
+*.log.*
+*.dmp
+*.zip
+*.db
+AppData.dat
+images_v2.db
+AwakenGPUToolLog.txt
+last_solution.txt
+display_config.xml
+_test_*.txt
+
+# 示例/生产图片数据（体积大，非代码）
+生产系统/Images/
+
+# =========================
+# OS
+# =========================
+Thumbs.db
+Desktop.ini
+.DS_Store

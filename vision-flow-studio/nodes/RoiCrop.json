@@ -1,0 +1,16 @@
+{
+  "type_id": "RoiCrop",
+  "display_name": "ROI裁剪",
+  "category": "预处理",
+  "icon": "icons/roi_crop.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "RoiCrop" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "裁剪后的子图" }
+  ],
+  "parameters": [
+    { "name": "roi", "type": "Roi", "shape": "rotated_rect", "default": "", "description": "ROI[cx,cy,w,h,angle]" }
+  ]
+}

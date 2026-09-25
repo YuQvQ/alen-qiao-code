@@ -1,0 +1,21 @@
+{
+  "type_id": "ShapeMatch",
+  "display_name": "形状匹配",
+  "category": "对位",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ShapeMatch" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "目标图像" },
+    { "name": "template", "type": "Image", "required": true, "description": "模板形状图" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图" },
+    { "name": "score", "type": "Double", "required": true, "description": "相似度(0-1)" },
+    { "name": "match", "type": "Bool", "required": true, "description": "是否匹配" }
+  ],
+  "parameters": [
+    { "name": "threshold", "type": "Double", "default": 0.5, "description": "匹配阈值" },
+    { "name": "min_area", "type": "Double", "default": 100.0, "description": "最小轮廓面积" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "匹配颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" }
+  ]
+}

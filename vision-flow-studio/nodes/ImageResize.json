@@ -1,0 +1,19 @@
+{
+  "type_id": "ImageResize",
+  "display_name": "图像缩放",
+  "category": "预处理",
+  "icon": "icons/image_resize.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ImageResize" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "缩放后的图像" }
+  ],
+  "parameters": [
+    { "name": "scale", "type": "Double", "default": 1.0, "description": "缩放比例(width/height为0时生效)" },
+    { "name": "width", "type": "Int", "default": 0, "description": "目标宽度(0=按比例)" },
+    { "name": "height", "type": "Int", "default": 0, "description": "目标高度(0=按比例)" },
+    { "name": "interpolation", "type": "Int", "default": 1, "description": "插值方法", "enum": [[0,"最近邻"],[1,"线性"],[2,"三次"],[3,"面积"],[4,"Lanczos"]] }
+  ]
+}

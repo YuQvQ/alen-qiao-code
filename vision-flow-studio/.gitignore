@@ -1,0 +1,29 @@
+# 构建产物
+bin/
+obj/
+artifacts/
+*.dll
+*.pdb
+
+# .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# 算法 DLL（构建时由 csproj 复制）
+runtimes/
+
+# 节点描述（开发期不忽略，保留在仓库）
+
+# 系统
+.DS_Store
+Thumbs.db

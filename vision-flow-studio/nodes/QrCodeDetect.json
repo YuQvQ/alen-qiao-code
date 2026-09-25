@@ -1,0 +1,18 @@
+{
+  "type_id": "QrCodeDetect",
+  "display_name": "二维码检测",
+  "category": "识别",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "QrCodeDetect" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "绘制框的结果图" },
+    { "name": "content", "type": "String", "required": true, "description": "解码内容" },
+    { "name": "count", "type": "Int", "required": true, "description": "检测数量" },
+    { "name": "points", "type": "Point2DList", "required": true, "description": "4个角点" }
+  ],
+  "parameters": [
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "框颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" },
+    { "name": "point_size", "type": "Int", "default": 5, "description": "角点半径" }
+  ]
+}

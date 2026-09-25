@@ -1,0 +1,15 @@
+{
+  "type_id": "SobelEdge",
+  "display_name": "Sobel梯度",
+  "category": "边缘",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "SobelEdge" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "梯度结果图" }],
+  "parameters": [
+    { "name": "dx", "type": "Int", "default": 1, "description": "x阶数" },
+    { "name": "dy", "type": "Int", "default": 0, "description": "y阶数" },
+    { "name": "ksize", "type": "Int", "default": 3, "description": "核大小" },
+    { "name": "scale", "type": "Double", "default": 1.0, "description": "缩放" },
+    { "name": "combine", "type": "Int", "default": 0, "description": "输出", "enum": [[0, "按dx/dy"], [1, "梯度幅值"]] }
+  ]
+}

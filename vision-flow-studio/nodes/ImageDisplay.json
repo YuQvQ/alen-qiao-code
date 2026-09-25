@@ -1,0 +1,13 @@
+{
+  "type_id": "ImageDisplay",
+  "display_name": "图像显示",
+  "category": "显示",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ImageDisplay" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "透传输出图像" }
+  ],
+  "parameters": []
+}

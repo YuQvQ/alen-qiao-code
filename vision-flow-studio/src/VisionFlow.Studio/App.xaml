@@ -1,0 +1,184 @@
+<Application x:Class="VisionFlow.Studio.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:VisionFlow.Studio">
+    <Application.Resources>
+        <!-- ============================================================
+             主题色板（与 dynamic-ui 视觉一致：紫色品牌色）
+             ============================================================ -->
+        <Color x:Key="BrandColor">#7C3AED</Color>
+        <Color x:Key="AccentColor">#06B6D4</Color>
+        <Color x:Key="SurfaceColor">#FFFFFF</Color>
+        <Color x:Key="SurfaceMutedColor">#F4F4F5</Color>
+        <Color x:Key="BorderColor">#E4E4E7</Color>
+        <Color x:Key="TextColorMain">#18181B</Color>
+        <Color x:Key="TextColorMuted">#71717A</Color>
+
+        <SolidColorBrush x:Key="BrandBrush" Color="{StaticResource BrandColor}" />
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
+        <SolidColorBrush x:Key="SurfaceMutedBrush" Color="{StaticResource SurfaceMutedColor}" />
+        <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+        <SolidColorBrush x:Key="TextMainBrush" Color="{StaticResource TextColorMain}" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextColorMuted}" />
+
+        <!-- ============================================================
+             错误态画刷：节点运行失败时标题栏 + 外边框变红
+             ============================================================ -->
+        <SolidColorBrush x:Key="ErrorBrush"       Color="#DC2626" />
+        <SolidColorBrush x:Key="ErrorBorderBrush" Color="#B91C1C" />
+
+        <!-- ============================================================
+             端口类型颜色画刷（用于画布端口圆点 + 连线着色）
+             名称与 TypeRegistry 中 PortType.Name 严格一致
+             ============================================================ -->
+        <SolidColorBrush x:Key="PortBrush.Image"             Color="#A855F7" />
+        <SolidColorBrush x:Key="PortBrush.Region"             Color="#3B82F6" />
+        <SolidColorBrush x:Key="PortBrush.MatchResultList"    Color="#0EA5E9" />
+        <SolidColorBrush x:Key="PortBrush.Point2DList"        Color="#06B6D4" />
+        <SolidColorBrush x:Key="PortBrush.RectList"           Color="#F97316" />
+        <SolidColorBrush x:Key="PortBrush.Pose2D"            Color="#9333EA" />
+        <SolidColorBrush x:Key="PortBrush.Int"                Color="#64748B" />
+        <SolidColorBrush x:Key="PortBrush.Double"            Color="#64748B" />
+        <SolidColorBrush x:Key="PortBrush.Bool"               Color="#64748B" />
+        <SolidColorBrush x:Key="PortBrush.String"             Color="#64748B" />
+        <SolidColorBrush x:Key="PortBrush.DoubleRange"        Color="#10B981" />
+
+        <!-- ============================================================
+             节点类别颜色（节点库左侧色条 + 节点标题栏底色）
+             ============================================================ -->
+        <SolidColorBrush x:Key="NodeCategoryBrush.源"    Color="#10B981" />
+        <SolidColorBrush x:Key="NodeCategoryBrush.定位"  Color="#7C3AED" />
+        <SolidColorBrush x:Key="NodeCategoryBrush.检测"  Color="#F97316" />
+        <SolidColorBrush x:Key="NodeCategoryBrush.测量"  Color="#06B6D4" />
+        <SolidColorBrush x:Key="NodeCategoryBrush.变换"  Color="#3B82F6" />
+        <SolidColorBrush x:Key="NodeCategoryBrush.逻辑"  Color="#64748B" />
+
+        <!-- ============================================================
+             通用样式
+             ============================================================ -->
+        <Style x:Key="CardBorder" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+
+        <Style x:Key="HeaderLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        </Style>
+
+        <!-- ============================================================
+             全局默认控件样式：圆角 + 悬停态，提升精致度
+             ============================================================ -->
+        <!-- 默认按钮：圆角、悬停高亮、按下反馈 -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextMainBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#EDE9FE" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource BrandBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#DDD6FE" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 默认输入框：圆角 -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource TextMainBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource BrandBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 默认下拉框：圆角 -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <!-- 主操作按钮：品牌色填充，悬停加深 -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BrandBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="{StaticResource BrandBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#6D28D9" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#5B21B6" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
+</Application>

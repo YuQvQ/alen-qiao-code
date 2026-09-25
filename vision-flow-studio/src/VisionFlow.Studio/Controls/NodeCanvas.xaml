@@ -1,0 +1,13 @@
+<Canvas x:Class="VisionFlow.Studio.Controls.NodeCanvas"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="Root"
+        Background="Transparent"
+        ClipToBounds="True"
+        Focusable="True"
+        TextOptions.TextFormattingMode="Display">
+    <!-- 网格背景层：不受变换影响，始终铺满可视区域 -->
+    <Canvas x:Name="GridLayer" IsHitTestVisible="False" />
+    <!-- 内容层：节点、连线、悬浮标签，受缩放/平移变换影响 -->
+    <Canvas x:Name="ContentCanvas" IsHitTestVisible="True" />
+</Canvas>

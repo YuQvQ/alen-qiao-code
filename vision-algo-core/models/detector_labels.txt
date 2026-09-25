@@ -1,0 +1,10 @@
+cat
+dog
+car
+person
+bus
+bike
+bird
+boat
+chair
+bottle

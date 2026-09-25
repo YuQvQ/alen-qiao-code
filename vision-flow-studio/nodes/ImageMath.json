@@ -1,0 +1,17 @@
+{
+  "type_id": "ImageMath",
+  "display_name": "图像运算",
+  "category": "几何",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ImageMath" },
+  "inputs": [
+    { "name": "image_a", "type": "Image", "required": true, "description": "图像A" },
+    { "name": "image_b", "type": "Image", "required": true, "description": "图像B" }
+  ],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "运算结果" }],
+  "parameters": [
+    { "name": "op", "type": "Int", "default": 0, "description": "运算", "enum": [[0, "相加 A+B"], [1, "相减 A-B"], [2, "绝对差 |A-B|"], [3, "加权混合"]] },
+    { "name": "alpha", "type": "Double", "default": 0.5, "description": "A 权重(仅混合)" },
+    { "name": "beta", "type": "Double", "default": 0.5, "description": "B 权重(仅混合)" },
+    { "name": "gamma", "type": "Double", "default": 0.0, "description": "偏移(仅混合)" }
+  ]
+}

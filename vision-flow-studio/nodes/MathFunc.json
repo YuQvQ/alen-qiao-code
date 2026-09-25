@@ -1,0 +1,14 @@
+{
+  "type_id": "MathFunc",
+  "display_name": "数学函数",
+  "category": "数学",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "MathFunc" },
+  "inputs": [{ "name": "x", "type": "Double", "required": false, "description": "输入值" }],
+  "outputs": [{ "name": "result", "type": "Double", "required": true, "description": "函数结果" }],
+  "parameters": [
+    { "name": "func", "type": "Int", "default": 0, "description": "函数", "enum": [[0, "恒等 x"], [1, "取反 -x"], [2, "绝对值"], [3, "开方 sqrt"], [4, "平方 x²"], [5, "sin"], [6, "cos"], [7, "tan"], [8, "ln"], [9, "e^x"], [10, "四舍五入"], [11, "向下取整"], [12, "向上取整"], [13, "限幅 clamp"]] },
+    { "name": "x", "type": "Double", "default": 0.0, "description": "输入值" },
+    { "name": "clamp_lo", "type": "Double", "default": 0.0, "description": "限幅下限" },
+    { "name": "clamp_hi", "type": "Double", "default": 1.0, "description": "限幅上限" }
+  ]
+}

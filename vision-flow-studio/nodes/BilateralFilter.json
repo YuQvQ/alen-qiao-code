@@ -1,0 +1,13 @@
+{
+  "type_id": "BilateralFilter",
+  "display_name": "双边滤波",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "BilateralFilter" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "保边去噪后图像" }],
+  "parameters": [
+    { "name": "d", "type": "Int", "default": 9, "description": "像素邻域直径" },
+    { "name": "sigma_color", "type": "Double", "default": 75.0, "description": "颜色空间标准差" },
+    { "name": "sigma_space", "type": "Double", "default": 75.0, "description": "坐标空间标准差" }
+  ]
+}

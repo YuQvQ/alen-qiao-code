@@ -1,0 +1,22 @@
+{
+  "type_id": "EdgeFinder",
+  "display_name": "边缘查找",
+  "category": "对位",
+  "icon": "icons/edge_finder.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "EdgeFinder" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图" },
+    { "name": "point", "type": "Pose2D", "required": true, "description": "边缘点位置" },
+    { "name": "score", "type": "Double", "required": true, "description": "边缘强度" },
+    { "name": "direction", "type": "Int", "required": true, "description": "方向:1=黑到白,-1=白到黑" }
+  ],
+  "parameters": [
+    { "name": "roi", "type": "Roi", "shape": "rotated_rect", "default": "", "description": "扫描ROI[cx,cy,w,h,angle]" },
+    { "name": "polarity", "type": "Int", "default": 0, "description": "边缘方向", "enum": [[0,"任意"],[1,"白到黑"],[2,"黑到白"]] },
+    { "name": "threshold", "type": "Double", "default": 30.0, "description": "梯度阈值" },
+    { "name": "subpixel", "type": "Int", "default": 1, "description": "亚像素精度", "enum": [[0,"否"],[1,"是"]] }
+  ]
+}

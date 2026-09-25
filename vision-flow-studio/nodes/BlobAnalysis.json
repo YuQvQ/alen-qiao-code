@@ -1,0 +1,23 @@
+{
+  "type_id": "BlobAnalysis",
+  "display_name": "Blob分析",
+  "category": "分析",
+  "icon": "icons/blob_analysis.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "BlobAnalysis" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像（建议二值图）" }
+  ],
+  "outputs": [
+    { "name": "blobs", "type": "RectList", "description": "Blob旋转外接矩形列表" },
+    { "name": "centers", "type": "Point2DList", "description": "Blob中心列表" },
+    { "name": "count", "type": "Int", "description": "Blob数量" }
+  ],
+  "parameters": [
+    { "name": "enable_binary", "type": "Int", "default": 1, "description": "二值化模式:0=关闭(输入已是二值图),1=Otsu自动阈值,2=手动阈值", "enum": [[0, "关闭"], [1, "Otsu自动"], [2, "手动阈值"]] },
+    { "name": "binary_threshold", "type": "Int", "default": 128, "min": 0, "max": 255, "description": "手动二值化阈值(仅enable_binary=2时生效)" },
+    { "name": "min_area", "type": "Int", "default": 50, "min": 0, "description": "最小面积" },
+    { "name": "max_area", "type": "Int", "default": 10000000, "description": "最大面积" },
+    { "name": "sort_by", "type": "String", "default": "area", "description": "排序方式 area/x/y" },
+    { "name": "max_count", "type": "Int", "default": 0, "description": "最大输出数(0=不限)" }
+  ]
+}

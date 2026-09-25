@@ -1,0 +1,15 @@
+{
+  "type_id": "AngleMeasure",
+  "display_name": "角度测量",
+  "category": "对位",
+  "icon": "icons/angle_measure.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "AngleMeasure" },
+  "inputs": [
+    { "name": "a", "type": "Double", "required": true, "description": "角度A(度)" },
+    { "name": "b", "type": "Double", "required": true, "description": "角度B(度)" }
+  ],
+  "outputs": [
+    { "name": "angle", "type": "Double", "required": true, "description": "夹角(B-A,归一化到[-180,180])" }
+  ],
+  "parameters": []
+}

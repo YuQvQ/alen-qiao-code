@@ -1,0 +1,9 @@
+{
+  "type_id": "Grayscale",
+  "display_name": "灰度化",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "Grayscale" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "灰度图像" }],
+  "parameters": []
+}

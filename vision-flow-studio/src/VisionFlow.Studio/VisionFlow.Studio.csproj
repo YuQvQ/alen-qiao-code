@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>VisionFlow.Studio</RootNamespace>
+    <AssemblyName>VisionFlow.Studio</AssemblyName>
+    <Version>0.1.0</Version>
+    <Company>VisionFlow</Company>
+    <Product>VisionFlow Studio</Product>
+    <Description>可视化拖拽机器视觉算法编排软件</Description>
+    <!-- 嵌入算法 DLL 的搜索路径（运行时从可执行目录 / 子目录 / 环境变量解析） -->
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <!-- 算法 DLL 输出目录：$(MSBuildThisFileDirectory)..\..\artifacts\bin -->
+  <!-- 让 UI 调试时能找到 vision_algo.dll -->
+  <PropertyGroup>
+    <AlgoDllDir Condition="'$(AlgoDllDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\vision-algo-core\build\bin\Release</AlgoDllDir>
+    <!-- OpenCV 运行时 DLL 目录（vision_algo.dll 链接 opencv_world4130.dll） -->
+    <OpenCVBinDir Condition="'$(OpenCVBinDir)' == ''">C:\tools\opencv\build\x64\vc16\bin</OpenCVBinDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 把 vision_algo.dll + opencv_world4130.dll 直接放到应用根目录
+         （bin\Release\net10.0-windows\）。.NET 10 的 P/Invoke 默认搜索规则
+         只查应用根目录 + PATH，不自动识别 runtimes\win-x64\native\ 子目录，
+         所以放根目录最稳。 -->
+    <None Include="$(AlgoDllDir)\vision_algo.dll"
+          Condition="Exists('$(AlgoDllDir)\vision_algo.dll')"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="vision_algo.dll" />
+    <None Include="$(OpenCVBinDir)\opencv_world4130.dll"
+          Condition="Exists('$(OpenCVBinDir)\opencv_world4130.dll')"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="opencv_world4130.dll" />
+    <!-- 节点描述 JSON：复制到 bin output 的 nodes/ 目录 -->
+    <None Include="..\..\nodes\*.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="nodes\%(FileName)%(Extension)" />
+  </ItemGroup>
+
+</Project>

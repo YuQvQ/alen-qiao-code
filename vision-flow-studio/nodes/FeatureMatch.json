@@ -1,0 +1,22 @@
+{
+  "type_id": "FeatureMatch",
+  "display_name": "特征匹配",
+  "category": "对位",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "FeatureMatch" },
+  "inputs": [
+    { "name": "image", "type": "Image", "required": true, "description": "目标图像" },
+    { "name": "template", "type": "Image", "required": true, "description": "模板图像" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "匹配连线图" },
+    { "name": "count", "type": "Int", "required": true, "description": "匹配点对数" },
+    { "name": "target_points", "type": "Point2DList", "required": true, "description": "目标匹配点" },
+    { "name": "template_points", "type": "Point2DList", "required": true, "description": "模板匹配点" }
+  ],
+  "parameters": [
+    { "name": "n_features", "type": "Int", "default": 500, "description": "特征点上限" },
+    { "name": "ratio", "type": "Double", "default": 0.75, "description": "比率阈值" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "匹配线颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 1, "description": "线宽" }
+  ]
+}

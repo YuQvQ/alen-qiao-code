@@ -1,0 +1,15 @@
+{
+  "type_id": "MinMaxLoc",
+  "display_name": "最值点定位",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "MinMaxLoc" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "标注最值点的结果图" },
+    { "name": "max_loc", "type": "Point2DList", "required": true, "description": "最亮点坐标" },
+    { "name": "min_loc", "type": "Point2DList", "required": true, "description": "最暗点坐标" },
+    { "name": "max_val", "type": "Double", "required": true, "description": "最大灰度值" },
+    { "name": "min_val", "type": "Double", "required": true, "description": "最小灰度值" }
+  ],
+  "parameters": [{ "name": "point_size", "type": "Int", "default": 8, "description": "标注点大小" }]
+}

@@ -1,0 +1,19 @@
+{
+  "type_id": "FindContours",
+  "display_name": "轮廓查找",
+  "category": "分析",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "FindContours" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入二值/灰度图" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "绘制轮廓的结果图" },
+    { "name": "points", "type": "Point2DList", "required": true, "description": "最大轮廓点集" },
+    { "name": "count", "type": "Int", "required": true, "description": "轮廓数量" }
+  ],
+  "parameters": [
+    { "name": "mode", "type": "Int", "default": 0, "description": "检索模式", "enum": [[0, "仅外部"], [1, "列表"], [2, "树形"]] },
+    { "name": "method", "type": "Int", "default": 1, "description": "近似", "enum": [[0, "全部点"], [1, "压缩"]] },
+    { "name": "min_area", "type": "Double", "default": 0, "description": "最小面积" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" }
+  ]
+}

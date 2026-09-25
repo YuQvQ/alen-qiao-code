@@ -1,0 +1,22 @@
+{
+  "type_id": "LineIntersect",
+  "display_name": "线线交点",
+  "category": "对位",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "LineIntersect" },
+  "inputs": [
+    { "name": "line_a", "type": "Point2DList", "required": true, "description": "直线A(2个端点)" },
+    { "name": "line_b", "type": "Point2DList", "required": true, "description": "直线B(2个端点)" },
+    { "name": "image", "type": "Image", "required": false, "description": "输入图像(可选,用于绘制叠加)" }
+  ],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "结果图(绘制两线及交点)" },
+    { "name": "intersection", "type": "Point2DList", "required": true, "description": "交点坐标(1个点)" },
+    { "name": "has_intersection", "type": "Bool", "required": true, "description": "是否相交(平行时为false)" },
+    { "name": "angle", "type": "Double", "required": true, "description": "两线夹角(度,0-90)" }
+  ],
+  "parameters": [
+    { "name": "draw_color", "type": "String", "default": "#FF0000", "description": "绘制颜色(#RRGGBB 或 B,G,R)" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "min": 1, "max": 20, "description": "线宽(1-20)" },
+    { "name": "point_size", "type": "Int", "default": 8, "min": 1, "max": 50, "description": "交点标记半径(1-50)" }
+  ]
+}

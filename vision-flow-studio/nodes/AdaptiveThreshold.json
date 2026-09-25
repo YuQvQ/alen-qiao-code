@@ -1,0 +1,14 @@
+{
+  "type_id": "AdaptiveThreshold",
+  "display_name": "自适应阈值",
+  "category": "预处理",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "AdaptiveThreshold" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [{ "name": "image", "type": "Image", "required": true, "description": "二值图" }],
+  "parameters": [
+    { "name": "block_size", "type": "Int", "default": 11, "description": "邻域块大小(奇数)" },
+    { "name": "c", "type": "Double", "default": 2.0, "description": "减去常数" },
+    { "name": "method", "type": "Int", "default": 0, "description": "方法", "enum": [[0, "高斯加权"], [1, "均值"]] },
+    { "name": "invert", "type": "Int", "default": 0, "description": "反相", "enum": [[0, "否"], [1, "是"]] }
+  ]
+}

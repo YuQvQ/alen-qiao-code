@@ -1,0 +1,32 @@
+{
+  "type_id": "DnnDetect",
+  "display_name": "深度学习-检测",
+  "category": "深度学习",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "DnnDetect" },
+  "inputs": [{ "name": "image", "type": "Image", "required": true, "description": "输入图像" }],
+  "outputs": [
+    { "name": "result_image", "type": "Image", "required": true, "description": "绘制检测框的结果图" },
+    { "name": "count", "type": "Int", "required": true, "description": "检测数" },
+    { "name": "boxes", "type": "RectList", "required": true, "description": "检测框列表" },
+    { "name": "max_confidence", "type": "Double", "required": true, "description": "最高置信度" },
+    { "name": "labels", "type": "String", "required": true, "description": "标签(逗号分隔)" }
+  ],
+  "parameters": [
+    { "name": "model", "type": "String", "default": "", "description": "模型路径" },
+    { "name": "config", "type": "String", "default": "", "description": "配置文件(可选)" },
+    { "name": "framework", "type": "Int", "default": 0, "description": "框架", "enum": [[0, "自动"], [1, "Caffe"], [2, "TensorFlow"], [3, "Darknet"], [4, "ONNX"]] },
+    { "name": "input_w", "type": "Int", "default": 416, "description": "输入宽" },
+    { "name": "input_h", "type": "Int", "default": 416, "description": "输入高" },
+    { "name": "scale", "type": "Double", "default": 0.00392156, "description": "像素缩放" },
+    { "name": "mean_r", "type": "Double", "default": 0, "description": "均值R" },
+    { "name": "mean_g", "type": "Double", "default": 0, "description": "均值G" },
+    { "name": "mean_b", "type": "Double", "default": 0, "description": "均值B" },
+    { "name": "swap_rb", "type": "Int", "default": 1, "description": "RGB<->BGR", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "crop", "type": "Int", "default": 0, "description": "中心裁剪", "enum": [[0, "否"], [1, "是"]] },
+    { "name": "conf_threshold", "type": "Double", "default": 0.5, "description": "置信度阈值" },
+    { "name": "nms_threshold", "type": "Double", "default": 0.4, "description": "NMS阈值" },
+    { "name": "labels", "type": "String", "default": "", "description": "标签文件路径" },
+    { "name": "draw_color", "type": "String", "default": "#00FF00", "description": "框颜色" },
+    { "name": "draw_thickness", "type": "Int", "default": 2, "description": "线宽" }
+  ]
+}

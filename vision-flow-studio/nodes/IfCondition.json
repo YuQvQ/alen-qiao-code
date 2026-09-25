@@ -1,0 +1,19 @@
+{
+  "type_id": "IfCondition",
+  "display_name": "条件判断",
+  "category": "工具",
+  "icon": "icons/if_condition.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "IfCondition" },
+  "inputs": [
+    { "name": "a", "type": "Double", "required": false, "description": "操作数A(可由参数a提供)" },
+    { "name": "b", "type": "Double", "required": false, "description": "操作数B(可由参数b提供)" }
+  ],
+  "outputs": [
+    { "name": "result", "type": "Int", "required": true, "description": "比较结果:1=成立,0=不成立" }
+  ],
+  "parameters": [
+    { "name": "op", "type": "Int", "default": 0, "description": "比较运算符", "enum": [[0, ">"], [1, ">="], [2, "<"], [3, "<="], [4, "=="], [5, "!="]] },
+    { "name": "a", "type": "Double", "default": 0.0, "description": "操作数A(若输入端口a未连接则用此值)" },
+    { "name": "b", "type": "Double", "default": 0.0, "description": "操作数B(若输入端口b未连接则用此值)" }
+  ]
+}
