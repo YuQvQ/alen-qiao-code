@@ -86,6 +86,7 @@ add_library(vision_algo SHARED
     src/connected_components.cpp
     src/image_math.cpp
     src/for_loop.cpp
+    src/ortho_router.cpp
     src/export.cpp
 )
 

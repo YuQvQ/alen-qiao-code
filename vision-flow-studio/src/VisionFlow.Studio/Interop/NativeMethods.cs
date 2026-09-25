@@ -67,4 +67,15 @@ internal static class NativeMethods
     // === 相机枚举（海康 MVS） ===
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr vz_enum_cameras();
+
+    // === 连线路由（正交 / 可拐弯 / 绕开节点）===
+    // obstacles: 每节点 4 个 double [x,y,w,h]，obstacles 长度 = obstacleCount*4
+    // outPoints: 缓冲，每点 2 个 double；maxPoints 为点数容量
+    // 返回实际点数；<=0 失败。
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int vz_route_orthogonal(
+        double sx, double sy, double tx, double ty,
+        [In] double[] obstacles, int obstacleCount,
+        double padding, double gridStep,
+        [In, Out] double[] outPoints, int maxPoints);
 }

@@ -63,6 +63,7 @@
 #include "connected_components.h"
 #include "image_math.h"
 #include "for_loop.h"
+#include "ortho_router.h"
 
 #include <string>
 #include <sstream>
@@ -234,6 +235,35 @@ VISION_API const char* vz_algo_last_error(VzAlgoCtx* ctx) {
     if (!ctx) return g_global_error.c_str();
     auto* impl = reinterpret_cast<VzAlgoCtxImpl*>(ctx);
     return impl->algo->lastError().c_str();
+}
+
+// ============================================================
+// 连线路由（正交 / 可拐弯 / 绕开节点）
+// ============================================================
+VISION_API int vz_route_orthogonal(
+    double sx, double sy, double tx, double ty,
+    const double* obstacles, int obstacle_count,
+    double padding, double grid_step,
+    double* out_points, int max_points) {
+    if (!out_points || max_points <= 0) return -1;
+
+    std::vector<vz::RectD> obs;
+    if (obstacles && obstacle_count > 0) {
+        obs.reserve(obstacle_count);
+        for (int i = 0; i < obstacle_count; ++i) {
+            const double* r = obstacles + i * 4;
+            obs.push_back({r[0], r[1], r[2], r[3]});
+        }
+    }
+
+    auto pts = vz::routeOrthogonal(sx, sy, tx, ty, obs, padding, grid_step);
+    int n = (int)pts.size();
+    if (n > max_points) n = max_points;
+    for (int i = 0; i < n; ++i) {
+        out_points[i * 2] = pts[i].first;
+        out_points[i * 2 + 1] = pts[i].second;
+    }
+    return n;
 }
 
 // ============================================================

@@ -323,6 +323,8 @@ public partial class NodeCanvas : Canvas
         SetTop(ctrl, node.Y);
         SetZIndex(ctrl, 10);
         _nodeCtrls[node] = ctrl;
+        // 新节点可能挡住已有连线 -> 全部重新绕障
+        RebuildAllEdges();
     }
 
     private void RemoveNodeVisual(Node node)
@@ -333,6 +335,8 @@ public partial class NodeCanvas : Canvas
             _nodeCtrls.Remove(node);
         }
         if (ReferenceEquals(SelectedNode, node)) SelectedNode = null;
+        // 节点移除后，连线障碍变少 -> 全部重新绕障
+        RebuildAllEdges();
     }
 
     private void AddEdgeVisual(Edge edge)
@@ -340,7 +344,7 @@ public partial class NodeCanvas : Canvas
         if (_edgePaths.ContainsKey(edge)) return;
         var path = new Path
         {
-            Stroke = ResolvePortBrush(edge.From.Type.Name),
+            Stroke = PickEdgeBrush(edge),
             StrokeThickness = 2,
             Data = BuildEdgeGeometry(edge),
             Cursor = Cursors.Hand,
@@ -457,13 +461,8 @@ public partial class NodeCanvas : Canvas
                     node.Y = pos.Y - _dragOffset.Y;
                     SetLeft(_draggingNode, node.X);
                     SetTop(_draggingNode, node.Y);
-                    // 重画相关连线
-                    foreach (var ed in Graph!.Edges
-                        .Where(e2 => e2.From.Owner == node || e2.To.Owner == node))
-                    {
-                        if (_edgePaths.TryGetValue(ed, out var p))
-                            p.Data = BuildEdgeGeometry(ed);
-                    }
+                    // 节点位置变了，可能挡住任意一条连线 -> 重画全部连线，让它们重新避让
+                    RebuildAllEdges();
                     // 同步刷新悬浮属性标签位置
                     if (ReferenceEquals(SelectedNode, node))
                         BuildFloatingLabels(node);
@@ -1174,14 +1173,114 @@ public partial class NodeCanvas : Canvas
         return null;
     }
 
+    /// <summary>重画画布上的全部连线（节点移动/增删后，让所有连线重新绕障）。</summary>
+    private void RebuildAllEdges()
+    {
+        if (Graph is null) return;
+        foreach (var ed in Graph.Edges)
+        {
+            if (_edgePaths.TryGetValue(ed, out var p))
+                p.Data = BuildEdgeGeometry(ed);
+        }
+    }
+
     private Geometry BuildEdgeGeometry(Edge e)
     {
         var fromCtrl = _nodeCtrls.GetValueOrDefault(e.From.Owner);
         var toCtrl = _nodeCtrls.GetValueOrDefault(e.To.Owner);
         if (fromCtrl is null || toCtrl is null) return Geometry.Empty;
-        var s = GetPortAnchor(fromCtrl, e.From);
-        var t = GetPortAnchor(toCtrl, e.To);
-        return BuildBezier(s, t);
+        var sReal = GetPortAnchor(fromCtrl, e.From);
+        var tReal = GetPortAnchor(toCtrl, e.To);
+        const double pad = 14.0;
+        // 路由端点推出节点外 pad，保证任何线段都不贴/不穿节点；
+        // 渲染时在两端各补一小段 stub 连回端口圆点。
+        var s = PushOut(sReal, NodeRect(fromCtrl), pad);
+        var t = PushOut(tReal, NodeRect(toCtrl), pad);
+        var pts = RouteEdgePoints(s, t, pad);
+        if (pts.Count >= 2)
+        {
+            pts.Insert(0, sReal);
+            pts.Add(tReal);
+        }
+        return BuildPolyline(pts);
+    }
+
+    private static (double x, double y, double w, double h) NodeRect(NodeControl ctrl)
+    {
+        double x = GetLeft(ctrl), y = GetTop(ctrl);
+        double w = ctrl.ActualWidth > 0 ? ctrl.ActualWidth : 220;
+        double h = ctrl.ActualHeight > 0 ? ctrl.ActualHeight : 140;
+        return (x, y, w, h);
+    }
+
+    /// <summary>把端口锚点对齐到节点最近边界后，再向外推出 pad，作为路由端点。</summary>
+    private static Point PushOut(Point p, (double x, double y, double w, double h) r, double pad)
+    {
+        double dl = p.X - r.x, dr = (r.x + r.w) - p.X;
+        double dt = p.Y - r.y, db = (r.y + r.h) - p.Y;
+        double m = Math.Min(Math.Min(dl, dr), Math.Min(dt, db));
+        if (m == dl) return new Point(r.x - pad, p.Y);
+        if (m == dr) return new Point(r.x + r.w + pad, p.Y);
+        if (m == dt) return new Point(p.X, r.y - pad);
+        return new Point(p.X, r.y + r.h + pad);
+    }
+
+    /// <summary>调用 C++ 路由算法，得到绕开所有节点的正交折线路径点。</summary>
+    private List<Point> RouteEdgePoints(Point s, Point t, double pad)
+    {
+        // 收集画布上所有节点矩形作为障碍物
+        var rects = new double[_nodeCtrls.Count * 4];
+        int k = 0;
+        foreach (var (_, ctrl) in _nodeCtrls)
+        {
+            double x = GetLeft(ctrl), y = GetTop(ctrl);
+            double w = ctrl.ActualWidth > 0 ? ctrl.ActualWidth : 220;
+            double h = ctrl.ActualHeight > 0 ? ctrl.ActualHeight : 140;
+            rects[k++] = x; rects[k++] = y; rects[k++] = w; rects[k++] = h;
+        }
+        try
+        {
+            var buf = new double[512]; // 最多 256 个点
+            int n = NativeMethods.vz_route_orthogonal(
+                s.X, s.Y, t.X, t.Y, rects, rects.Length / 4,
+                padding: 14.0, gridStep: 10.0, buf, 256);
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append($"S=({s.X:F1},{s.Y:F1}) T=({t.X:F1},{t.Y:F1}) n={n}");
+                for (int i = 0; i < rects.Length / 4; i++)
+                    sb.Append($" | r{i}=({rects[i*4]:F0},{rects[i*4+1]:F0},{rects[i*4+2]:F0},{rects[i*4+3]:F0})");
+                sb.Append(" =>");
+                for (int i = 0; i < n; i++) sb.Append($" ({buf[i*2]:F0},{buf[i*2+1]:F0})");
+                sb.AppendLine();
+                System.IO.File.AppendAllText(@"d:\unisic_vision\route_debug.log", sb.ToString());
+            }
+            catch { }
+            if (n >= 2)
+            {
+                var pts = new List<Point>(n);
+                for (int i = 0; i < n; i++)
+                    pts.Add(new Point(buf[i * 2], buf[i * 2 + 1]));
+                return pts;
+            }
+        }
+        catch
+        {
+            // 原生 DLL 缺失/版本过旧：回退到简单 L 形，不影响使用
+        }
+        return new List<Point> { s, new Point(t.X, s.Y), t };
+    }
+
+    /// <summary>把点列连成正交折线几何（直线段 + 拐弯）。</summary>
+    private static Geometry BuildPolyline(List<Point> pts)
+    {
+        if (pts.Count < 2) return Geometry.Empty;
+        var fig = new PathFigure { StartPoint = pts[0], IsClosed = false };
+        for (int i = 1; i < pts.Count; i++)
+            fig.Segments.Add(new LineSegment(pts[i], true));
+        var geo = new PathGeometry();
+        geo.Figures.Add(fig);
+        return geo;
     }
 
     private static Geometry BuildBezier(Point s, Point t)
@@ -1197,9 +1296,30 @@ public partial class NodeCanvas : Canvas
         return geo;
     }
 
-    private static Brush ResolvePortBrush(string typeName)
+    // 连线调色板：每条线取一个与端口无关的、互不相同的颜色。
+    private static readonly Brush[] _edgePalette =
     {
-        var key = $"PortBrush.{typeName}";
-        return Application.Current.TryFindResource(key) as Brush ?? Brushes.Gray;
+        new SolidColorBrush(Color.FromRgb(0xA8,0x55,0xF7)), // 紫
+        new SolidColorBrush(Color.FromRgb(0x06,0xB6,0xD4)), // 青
+        new SolidColorBrush(Color.FromRgb(0xF9,0x73,0x16)), // 橙
+        new SolidColorBrush(Color.FromRgb(0x10,0xB9,0x81)), // 绿
+        new SolidColorBrush(Color.FromRgb(0xEF,0x44,0x44)), // 红
+        new SolidColorBrush(Color.FromRgb(0x3B,0x82,0xF6)), // 蓝
+        new SolidColorBrush(Color.FromRgb(0xEF,0x44,0x84)), // 粉
+        new SolidColorBrush(Color.FromRgb(0xF5,0x9E,0x0B)), // 琥珀
+        new SolidColorBrush(Color.FromRgb(0x8B,0x5C,0xF6)), // 靛
+        new SolidColorBrush(Color.FromRgb(0x14,0xB8,0xA6)), // 蓝绿
+    };
+
+    /// <summary>按连线身份稳定取色，同一条线重建后颜色保持一致。</summary>
+    private static Brush PickEdgeBrush(Edge edge)
+    {
+        string id = edge.Id.ToString();
+        int h = 17;
+        foreach (char c in id) h = h * 31 + c;
+        int idx = (h & 0x7FFFFFFF) % _edgePalette.Length;
+        var brush = _edgePalette[idx];
+        brush.Freeze();
+        return brush;
     }
 }

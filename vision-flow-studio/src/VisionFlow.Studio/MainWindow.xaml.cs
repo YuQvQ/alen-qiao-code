@@ -749,6 +749,13 @@ public partial class MainWindow : Window
     private async void BtnRun_Click(object sender, RoutedEventArgs e)
     {
         if (_engine is null || _runCts is not null) return;
+        if (_graph.Nodes.Count == 0)
+        {
+            StatusText.Text = "画布为空，无法运行";
+            Logger.Error("Run", "画布为空（0 节点），已阻止连续运行");
+            MessageBox.Show("画布上没有任何节点，无法运行。请先添加节点。", "无法运行", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         _runCts = new System.Threading.CancellationTokenSource();
         var ct = _runCts.Token;
         BtnRun.IsEnabled = false;
@@ -799,6 +806,13 @@ public partial class MainWindow : Window
     private async void BtnRunOnce_Click(object sender, RoutedEventArgs e)
     {
         if (_engine is null || _runCts is not null) return;   // 连续运行中不并发
+        if (_graph.Nodes.Count == 0)
+        {
+            StatusText.Text = "画布为空，无法运行";
+            Logger.Error("Run", "画布为空（0 节点），已阻止运行一次");
+            MessageBox.Show("画布上没有任何节点，无法运行。请先添加节点。", "无法运行", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         BtnRun.IsEnabled = false;
         BtnRunOnce.IsEnabled = false;
         Mouse.OverrideCursor = Cursors.Wait;
