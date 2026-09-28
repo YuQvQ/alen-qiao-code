@@ -110,6 +110,11 @@ int TemplateMatchAlgo::setParam(const std::string& key, const std::string& value
         if (binary_threshold_ > 255) binary_threshold_ = 255;
         return VZ_OK;
     }
+    if (key == "normalize_light") {
+        normalize_light_ = parseJsonInt(value_json, 1);
+        if (normalize_light_ != 0) normalize_light_ = 1;
+        return VZ_OK;
+    }
     if (key == "refine_boundary") {
         refine_boundary_ = parseJsonInt(value_json, 1);
         if (refine_boundary_ != 0) refine_boundary_ = 1;
@@ -472,6 +477,20 @@ int TemplateMatchAlgo::process() {
         cv::threshold(tmplGray, tmplGray, binary_threshold_, 255, cv::THRESH_BINARY);
     }
 
+    // 光照归一化：分别除以各自的大核高斯模糊背景，消除光照渐变/不均匀，
+    // 使同类目标的匹配分数更一致、异类（如带孔 vs 实心）分数间隙更明显。
+    if (normalize_light_ && !enable_binary_) {
+        auto illumNorm = [](cv::Mat& m) {
+            int k = std::max(31, (std::min(m.cols, m.rows) / 8) | 1);  // 大奇数核
+            cv::Mat bg;
+            cv::GaussianBlur(m, bg, cv::Size(k, k), 0);
+            cv::divide(m, bg, m, 255.0);  // dst = m/bg*255
+            m.convertTo(m, CV_8U);
+        };
+        illumNorm(searchGray);
+        illumNorm(tmplGray);
+    }
+
     // === 模板掩膜处理：排除像素设为有效像素均值，使其对 TM_CCOEFF_NORMED 贡献为 0 ===
     // 这样既支持掩膜又保持 CCOEFF 的亮度不变性，避免 CCORR 的误匹配。
     bool hasMask = false;
@@ -536,6 +555,8 @@ int TemplateMatchAlgo::process() {
     const cv::Mat& coarseTmpl = tmplPyr[coarseLevel];
     // 粗层多取候选（max_count * 4，至少 8 个）
     int coarseMax = std::max(8, max_count_ * 4);
+    // 粗层（下采样后）分数普遍偏低，用放宽的阈值召回候选，最终由 lvl0 分数过滤。
+    double coarseThreshold = std::max(0.3, threshold_ - 0.2);
 
     for (double angle : angles) {
         for (double scale : scales) {
@@ -547,7 +568,7 @@ int TemplateMatchAlgo::process() {
             cv::Mat result;
             matchTemplateEx(coarseSearch, transformedTmpl, result);
 
-            auto peaks = findPeaks(result, threshold_, coarseMax,
+            auto peaks = findPeaks(result, coarseThreshold, coarseMax,
                                    transformedTmpl.cols, transformedTmpl.rows);
             for (const auto& p : peaks) {
                 Candidate c;
@@ -563,93 +584,115 @@ int TemplateMatchAlgo::process() {
     }
 
     // === 第 2 阶段：金字塔逐层精细化 ===
-    // 在 coarseLevel-1 → 0 的每一层，对每个候选位置 ±2 像素范围内重做 matchTemplate
+    // 在 coarseLevel-1 → 0 的每一层，对每个候选位置附近重做 matchTemplate。
+    // 关键：精化阶段不按阈值丢弃候选（中间层分数本就偏低、且量化误差可能使真峰偏出小窗口），
+    // 只更新位置与分数，最终在输出前统一过滤。
     for (int lvl = coarseLevel - 1; lvl >= 0; --lvl) {
         if (candidates.empty()) break;
         const cv::Mat& lvlSearch = searchPyr[lvl];
         const cv::Mat& lvlTmpl = tmplPyr[lvl];
         // 当前层 1 像素 = 原图 2^lvl 像素
         double lvlScale = std::pow(2.0, lvl);
-        int searchRadius = 2;  // 在上一层位置 ±2 像素范围内搜索
+        // 搜索半径随层放大：越粗的层量化误差越大，给更多余量。基础 3，每高一层 +1。
+        int searchRadius = 3 + (coarseLevel - lvl);
         std::vector<Candidate> refined;
 
         for (const auto& c : candidates) {
             // 将候选位置（原图坐标）转换到当前层坐标
             double lx = c.x / lvlScale;
             double ly = c.y / lvlScale;
-            int cx = static_cast<int>(lx);
-            int cy = static_cast<int>(ly);
+            int cx = static_cast<int>(std::round(lx));
+            int cy = static_cast<int>(std::round(ly));
             // 限定搜索窗口：以 (cx, cy) 为中心，±searchRadius 像素范围
             int sx = std::max(0, cx - searchRadius - lvlTmpl.cols / 2);
             int sy = std::max(0, cy - searchRadius - lvlTmpl.rows / 2);
-            int ex = std::min(lvlSearch.cols, cx + searchRadius + lvlTmpl.cols / 2);
-            int ey = std::min(lvlSearch.rows, cy + searchRadius + lvlTmpl.rows / 2);
+            int ex = std::min(lvlSearch.cols, cx + searchRadius + lvlTmpl.cols / 2 + 1);
+            int ey = std::min(lvlSearch.rows, cy + searchRadius + lvlTmpl.rows / 2 + 1);
             int sw = ex - sx;
             int sh = ey - sy;
-            if (sw < lvlTmpl.cols || sh < lvlTmpl.rows) continue;
+            if (sw < lvlTmpl.cols || sh < lvlTmpl.rows) {
+                // 窗口太小：保留原候选，不丢弃
+                refined.push_back(c);
+                continue;
+            }
 
             cv::Mat subSearch = lvlSearch(cv::Rect(sx, sy, sw, sh));
             cv::Mat transformedTmpl = transformTemplate(lvlTmpl, c.angle, 1.0);
             if (transformedTmpl.rows > subSearch.rows ||
-                transformedTmpl.cols > subSearch.cols) continue;
+                transformedTmpl.cols > subSearch.cols) {
+                refined.push_back(c);
+                continue;
+            }
             cv::Mat result;
             matchTemplateEx(subSearch, transformedTmpl, result);
             double min_val, max_val;
             cv::Point min_loc, max_loc;
             cv::minMaxLoc(result, &min_val, &max_val, &min_loc, &max_loc);
 
-            if (max_val < threshold_) continue;
-            // 当前层局部坐标 -> 原图坐标
+            // 当前层局部坐标 -> 原图坐标（即使分数低于阈值也保留，由最终阶段过滤）
             Candidate rc = c;
             rc.x = (sx + max_loc.x + transformedTmpl.cols / 2.0) * lvlScale;
             rc.y = (sy + max_loc.y + transformedTmpl.rows / 2.0) * lvlScale;
             rc.score = max_val;
             refined.push_back(rc);
         }
-        if (!refined.empty()) {
-            candidates = std::move(refined);
-        }
+        candidates = std::move(refined);
     }
 
-    // === 第 3 阶段：子像素精细化（在最细层 = lvl 0 做抛物线拟合） ===
-    if (subpixel_ && !candidates.empty()) {
+    // === 第 3 阶段：在最细层 lvl0 对每个候选重新验证打分 + 子像素定位 ===
+    // 重要：无论 subpixel_ 是否开启，都必须在 lvl0 重新评估，
+    // 否则候选可能带着粗层量化坐标混过阈值过滤，画到错误位置。
+    // 验证失败（分数低于阈值 / 越界）的候选直接剔除。
+    if (!candidates.empty()) {
         const cv::Mat& fineSearch = searchPyr[0];
         const cv::Mat& fineTmpl = tmplPyr[0];
+        std::vector<Candidate> verified;
+        verified.reserve(candidates.size());
         for (auto& c : candidates) {
-            // 将 c.x, c.y 视为模板中心；模板左上角 = (c.x - w/2, c.y - h/2)
             cv::Mat transformedTmpl = transformTemplate(fineTmpl, c.angle, 1.0);
             int tw = transformedTmpl.cols;
             int th = transformedTmpl.rows;
-            int px = static_cast<int>(c.x - tw / 2.0);
-            int py = static_cast<int>(c.y - th / 2.0);
-            // 在 ±2 像素范围内重新做 matchTemplate，找精确峰值
-            int sx = std::max(0, px - 2);
-            int sy = std::max(0, py - 2);
-            int ex = std::min(fineSearch.cols, px + 2 + tw);
-            int ey = std::min(fineSearch.rows, py + 2 + th);
+            int px = static_cast<int>(std::round(c.x - tw / 2.0));
+            int py = static_cast<int>(std::round(c.y - th / 2.0));
+            // ±3 像素窗口重匹配，容错量化误差
+            int sx = std::max(0, px - 3);
+            int sy = std::max(0, py - 3);
+            int ex = std::min(fineSearch.cols, px + 3 + tw);
+            int ey = std::min(fineSearch.rows, py + 3 + th);
             int sw = ex - sx;
             int sh = ey - sy;
-            if (sw < tw || sh < th) continue;
+            if (sw < tw || sh < th) continue;  // 越界：剔除
             cv::Mat subSearch = fineSearch(cv::Rect(sx, sy, sw, sh));
             cv::Mat result;
             matchTemplateEx(subSearch, transformedTmpl, result);
             double min_val, max_val;
             cv::Point min_loc, max_loc;
             cv::minMaxLoc(result, &min_val, &max_val, &min_loc, &max_loc);
-            if (max_val < threshold_) continue;
+            if (max_val < threshold_) continue;  // 分数不足：剔除
             c.score = max_val;
-            // 抛物线拟合位置
-            double rx, ry;
-            refineSubpixel(result, max_loc, rx, ry);
-            // 转换回原图坐标：
-            // rx = max_loc.x + dx + 0.5（result 中亚像素位置，max_loc 是模板左上角）
-            // 模板中心 = subSearch 左上角(sx) + 模板左上角(max_loc) + 模板宽高一半(tw/2,th/2) + 亚像素偏移(dx,dy)
-            c.x = sx + rx + tw / 2.0 - 0.5;
-            c.y = sy + ry + th / 2.0 - 0.5;
+            if (subpixel_) {
+                double rx, ry;
+                refineSubpixel(result, max_loc, rx, ry);
+                c.x = sx + rx + tw / 2.0 - 0.5;
+                c.y = sy + ry + th / 2.0 - 0.5;
+            } else {
+                c.x = sx + max_loc.x + tw / 2.0;
+                c.y = sy + max_loc.y + th / 2.0;
+            }
+            verified.push_back(c);
         }
+        candidates = std::move(verified);
     }
 
-    // === 第 4 阶段：NMS 去除重叠 ===
+    // === 第 4 阶段：按最终阈值过滤 + NMS 去除重叠 ===
+    // 精化阶段未丢弃候选，这里统一用 lvl0 的最终分数过滤。
+    {
+        std::vector<Candidate> kept;
+        kept.reserve(candidates.size());
+        for (const auto& c : candidates)
+            if (c.score >= threshold_) kept.push_back(c);
+        candidates = std::move(kept);
+    }
     std::sort(candidates.begin(), candidates.end(),
               [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
     std::vector<Candidate> survived;
@@ -753,10 +796,18 @@ int TemplateMatchAlgo::process() {
         if (refW < tw * 0.3 || refW > tw * 3.0 || refH < th * 0.3 || refH > th * 3.0) {
             return false;
         }
+        // 安全校验：精化后的中心不应偏离匹配中心太远（flood fill 跑偏时回退原框）
+        double refCx = bestRR.center.x + rx;
+        double refCy = bestRR.center.y + ry;
+        double maxDim = std::max(tw, th);
+        double dc = std::sqrt((refCx - cx) * (refCx - cx) + (refCy - cy) * (refCy - cy));
+        if (dc > maxDim * 0.4) {
+            return false;
+        }
 
         // 转回原图坐标
-        r.x = bestRR.center.x + rx;
-        r.y = bestRR.center.y + ry;
+        r.x = refCx;
+        r.y = refCy;
         r.w = refW;
         r.h = refH;
         r.angle = bestRR.angle;
@@ -878,8 +929,8 @@ const char* TemplateMatchAlgo::describe() const {
     {"name":"count","type":"Int"}
   ],
   "parameters":[
-    {"name":"threshold","type":"Double","default":0.5,"min":0,"max":1,"description":"匹配置信度阈值"},
-    {"name":"max_count","type":"Int","default":1,"min":1,"description":"最大匹配数量"},
+    {"name":"threshold","type":"Double","default":0.6,"min":0,"max":1,"description":"匹配置信度阈值（建议点'分析推荐阈值'自动设定）"},
+    {"name":"max_count","type":"Int","default":100,"min":1,"description":"最大匹配数量"},
     {"name":"angle_range","type":"DoubleRange","default":[-5,5],"description":"角度搜索范围(度)"},
     {"name":"angle_step","type":"Double","default":5.0,"description":"角度搜索步长(度)"},
     {"name":"scale_range","type":"DoubleRange","default":[0.95,1.05],"description":"缩放搜索范围"},
@@ -889,6 +940,7 @@ const char* TemplateMatchAlgo::describe() const {
     {"name":"subpixel","type":"Int","default":1,"description":"子像素精度","enum":[[0,"否"],[1,"是"]]},
     {"name":"enable_binary","type":"Int","default":0,"description":"二值化预处理","enum":[[0,"否"],[1,"是"]]},
     {"name":"binary_threshold","type":"Int","default":128,"min":0,"max":255,"description":"二值化阈值(仅enable_binary=1时)"},
+    {"name":"normalize_light","type":"Int","default":1,"description":"光照归一化(抗光照渐变)","enum":[[0,"否"],[1,"是"]]},
     {"name":"refine_boundary","type":"Int","default":1,"description":"边缘检测精化边界","enum":[[0,"否"],[1,"是"]]},
     {"name":"display_mode","type":"Int","default":0,"description":"结果图显示模式","enum":[[0,"检测结果"],[1,"预处理灰度图"],[2,"预处理二值图"]]},
     {"name":"template_roi","type":"String","default":"","description":"模板ROI[cx,cy,w,h,angle]"},

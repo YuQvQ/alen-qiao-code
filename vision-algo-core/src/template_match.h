@@ -62,6 +62,7 @@ private:
     int    subpixel_        = 1;         // 子像素精度开关
     int    enable_binary_   = 0;         // 二值化预处理开关
     int    binary_threshold_ = 128;     // 二值化阈值
+    int    normalize_light_  = 1;       // 光照归一化（除以大核模糊背景），默认开，抗光照渐变
     int    refine_boundary_  = 1;       // 边缘检测精化边界 0=否 1=是（默认1）
     int    display_mode_     = 0;       // 结果图显示模式 0=检测结果 1=预处理灰度图 2=预处理二值图
 
