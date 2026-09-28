@@ -119,8 +119,43 @@ public static class OverlayRenderer
                 }
                 break;
             case "DistanceMeasure":
-                if (GetD(node, "distance", out var dist))
-                    AddText(canvas, $"D={dist:F2}px", 8, 8, Brushes.Yellow);
+                {
+                    bool hasDist = GetD(node, "distance", out var dist);
+                    if (GetInputPoint(node, "a", out var A) && GetInputPoint(node, "b", out var B))
+                    {
+                        AddSeg(canvas, A, B, scale, stroke, thick);
+                        AddCross(canvas, A, ptSize, Brushes.Red);
+                        AddCross(canvas, B, ptSize, Brushes.Blue);
+                        var mid = Mid(A, B);
+                        double lx = 0, ly = -16 * scale;
+                        double dx = B.x - A.x, dy = B.y - A.y;
+                        double L = Math.Sqrt(dx * dx + dy * dy);
+                        if (L > 1e-6)
+                        {
+                            double nx = -dy / L, ny = dx / L;
+                            if (ny > 0) { nx = -nx; ny = -ny; }
+                            lx = nx * 16 * scale; ly = ny * 16 * scale;
+                        }
+                        if (hasDist)
+                            AddText(canvas, $"{dist:F2}px",
+                                mid.x * scale + lx, mid.y * scale + ly - 8 * scale, Brushes.Yellow);
+                    }
+                    else if (hasDist)
+                        AddText(canvas, $"D={dist:F2}px", 8, 8, Brushes.Yellow);
+                    break;
+                }
+            case "PointSort":
+                if (GetPoints(node, "points", out var sp))
+                {
+                    for (int i = 0; i < sp.Length; i++)
+                    {
+                        var p = sp[i];
+                        AddCross(canvas, p, ptSize, Brushes.Lime);
+                        AddText(canvas, i.ToString(),
+                            p.x * scale + 4 * scale, p.y * scale - 12 * scale, Brushes.Yellow);
+                    }
+                    AddText(canvas, $"sorted={sp.Length}", 8, 8, Brushes.Yellow);
+                }
                 break;
             case "CornerDetect":
                 if (GetPoints(node, "points", out var cp2))
@@ -348,8 +383,41 @@ public static class OverlayRenderer
                 }
                 break;
             case "DistanceMeasure":
-                if (GetD(node, "distance", out var dist))
-                    Text(dc, $"D={dist:F2}px", 8, 8, Brushes.Yellow);
+                {
+                    bool hasDist = GetD(node, "distance", out var dist);
+                    if (GetInputPoint(node, "a", out var A) && GetInputPoint(node, "b", out var B))
+                    {
+                        DrawSeg(dc, A, B, pen);
+                        DrawCross(dc, A, ptSize, Brushes.Red);
+                        DrawCross(dc, B, ptSize, Brushes.Blue);
+                        var mid = Mid(A, B);
+                        double lx = 0, ly = -16;
+                        double dx = B.x - A.x, dy = B.y - A.y;
+                        double L = Math.Sqrt(dx * dx + dy * dy);
+                        if (L > 1e-6)
+                        {
+                            double nx = -dy / L, ny = dx / L;
+                            if (ny > 0) { nx = -nx; ny = -ny; }
+                            lx = nx * 16; ly = ny * 16;
+                        }
+                        if (hasDist)
+                            Text(dc, $"{dist:F2}px", mid.x + lx, mid.y + ly - 8, Brushes.Yellow);
+                    }
+                    else if (hasDist)
+                        Text(dc, $"D={dist:F2}px", 8, 8, Brushes.Yellow);
+                    break;
+                }
+            case "PointSort":
+                if (GetPoints(node, "points", out var sp2))
+                {
+                    for (int i = 0; i < sp2.Length; i++)
+                    {
+                        var p = sp2[i];
+                        DrawCross(dc, p, ptSize, Brushes.Lime);
+                        Text(dc, i.ToString(), p.x + 4, p.y - 12, Brushes.Yellow);
+                    }
+                    Text(dc, $"sorted={sp2.Length}", 8, 8, Brushes.Yellow);
+                }
                 break;
             case "CornerDetect":
                 if (GetPoints(node, "points", out var cp2))
@@ -516,6 +584,15 @@ public static class OverlayRenderer
     {
         if (node.OutputCache.TryGetValue(name, out var o) && o is VzPose2D p) { v = p; return true; }
         v = default; return false;
+    }
+    private static bool GetInputPoint(Node node, string name, out VzPoint2D v)
+    {
+        v = default;
+        if (node.InputCache is null) return false;
+        if (!node.InputCache.TryGetValue(name, out var o) || o is null) return false;
+        if (o is VzPose2D p) { v = p.point; return true; }
+        if (o is VzPoint2D q) { v = q; return true; }
+        return false;
     }
     private static bool GetD(Node node, string name, out double v)
     {

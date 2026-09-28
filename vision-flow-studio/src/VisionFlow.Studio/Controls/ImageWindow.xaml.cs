@@ -28,6 +28,11 @@ public partial class ImageWindow : UserControl
     // 当前缩放比例：1.0 = 1:1 原始像素，>1 放大，<1 缩小
     private double _scale = 1.0;
 
+    // 视图保持：仅在首次显示或图像尺寸变化时适应窗口；
+    // 切换节点/重新运行时保留用户已调好的缩放与平移。
+    private bool _haveView = false;
+    private double _lastImgW, _lastImgH;
+
     // === 平移状态 ===
     private bool _isPanning;
     private Point _panStartScreen;
@@ -130,7 +135,7 @@ public partial class ImageWindow : UserControl
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} 来自 {sourceLabel}";
         Logger.Info("ImageWindow", $"显示图像：{img.width}x{img.height}x{img.channels} (来源：{sourceLabel})");
-        FitToWindow();
+        ApplyView();
         RenderRoiOverlays();
         RenderMatchLabels();
     }
@@ -161,7 +166,7 @@ public partial class ImageWindow : UserControl
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} 来自 {sourceLabel} (矢量覆盖)";
-        FitToWindow();
+        ApplyView();
         RenderRoiOverlays();
         RenderMatchLabels();
     }
@@ -171,6 +176,7 @@ public partial class ImageWindow : UserControl
         ImageView.Source = null;
         _bmp = null;
         _currentMatches = null;
+        _haveView = false;
         ImageInfoText.Text = "(无图像)";
         PixelInfoText.Text = "X=0, Y=0, Gray=—";
     }
@@ -194,7 +200,7 @@ public partial class ImageWindow : UserControl
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} + {matches?.Length ?? 0} 匹配 来自 {sourceLabel}";
         Logger.Info("ImageWindow", $"显示带标注图像：{img.width}x{img.height}x{img.channels}，叠加 {matches?.Length ?? 0} 个匹配 (来源：{sourceLabel})");
-        FitToWindow();
+        ApplyView();
         RenderRoiOverlays();
         RenderMatchLabels();
     }
@@ -221,7 +227,7 @@ public partial class ImageWindow : UserControl
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} + {rects?.Length ?? 0} 区域 来自 {sourceLabel}";
-        FitToWindow();
+        ApplyView();
         RenderRoiOverlays();
     }
 
@@ -277,6 +283,22 @@ public partial class ImageWindow : UserControl
         ImageView.Height = _imgPixelH * _scale;
         RoiCanvas.Width = _imgPixelW * _scale;
         RoiCanvas.Height = _imgPixelH * _scale;
+    }
+
+    /// <summary>应用视图：首次显示或图像尺寸变化时适应窗口，否则保留当前缩放/平移。</summary>
+    private void ApplyView()
+    {
+        bool sizeChanged = (_imgPixelW != _lastImgW || _imgPixelH != _lastImgH);
+        if (!_haveView || sizeChanged)
+            FitToWindow();
+        else
+        {
+            UpdateImageSize();
+            UpdateZoomText();
+        }
+        _haveView = true;
+        _lastImgW = _imgPixelW;
+        _lastImgH = _imgPixelH;
     }
 
     /// <summary>适应窗口：计算缩放比例使图像完整显示在视口内，居中。</summary>

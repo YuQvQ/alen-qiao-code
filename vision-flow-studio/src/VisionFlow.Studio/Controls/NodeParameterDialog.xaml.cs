@@ -21,6 +21,9 @@ public partial class NodeParameterDialog : Window
     /// <summary>回调：当用户点击 ROI 绘制按钮时，把当前参数名交回 MainWindow 处理。</summary>
     public Action<Node, string>? OnRoiDrawRequested { get; set; }
 
+    /// <summary>回调：分析模板匹配的分数分布，返回 (推荐阈值, 文字报告)；失败返回 null。</summary>
+    public Func<Node, (double threshold, string report)?>? OnAnalyzeThreshold { get; set; }
+
     public NodeParameterDialog(Node node)
     {
         InitializeComponent();
@@ -47,10 +50,6 @@ public partial class NodeParameterDialog : Window
 
         foreach (var p in desc.Parameters)
         {
-            // ROI 参数不在对话框里编辑：改为在右侧图像窗口的 ROI 工具栏上直接绘制。
-            // 参数仍保留在节点描述中，以便图像窗口显示工具栏并把绘制结果传给算法。
-            if (p.Type == "Roi") continue;
-
             var row = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
             // 参数名 + 类型 + 默认值
@@ -264,6 +263,70 @@ public partial class NodeParameterDialog : Window
         }
 
         AddTcpControls();
+        AddThresholdAssist();
+    }
+
+    /// <summary>模板匹配节点：追加“分析推荐阈值”按钮，自动根据分数分布推荐 threshold。</summary>
+    private void AddThresholdAssist()
+    {
+        if (Node.TypeId != "TemplateMatch") return;
+
+        var panel = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        var btn = new Button
+        {
+            Content = "🔍 分析推荐阈值",
+            Padding = new Thickness(12, 5, 12, 5),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        var hint = new TextBlock
+        {
+            Text = "用低阈值跑一遍采集所有候选匹配，按分数断层自动推荐最佳 threshold。需要 image 与模板(ROI)已就绪。",
+            FontSize = 10,
+            Foreground = (System.Windows.Media.Brush)Application.Current.TryFindResource("TextMutedBrush")!,
+            Margin = new Thickness(0, 4, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        btn.Click += (_, _) =>
+        {
+            if (OnAnalyzeThreshold is null)
+            {
+                MessageBox.Show(this, "分析功能未就绪", "提示");
+                return;
+            }
+            btn.IsEnabled = false;
+            var oldContent = btn.Content;
+            btn.Content = "分析中…";
+            Cursor = System.Windows.Input.Cursors.Wait;
+            (double threshold, string report)? res = null;
+            string? err = null;
+            try { res = OnAnalyzeThreshold(Node); }
+            catch (Exception ex) { err = ex.Message; }
+            finally
+            {
+                Cursor = null;
+                btn.IsEnabled = true;
+                btn.Content = oldContent;
+            }
+            if (err is not null)
+            {
+                MessageBox.Show(this, "分析失败：" + err, "推荐阈值", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (res is null)
+            {
+                MessageBox.Show(this, "未采集到匹配结果，请先确认 image 已连接、模板 ROI 已绘制，并运行过一次。",
+                    "推荐阈值", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var (thr, report) = res.Value;
+            Node.Parameters["threshold"] = thr.ToString("F2");
+            BuildParamPanel();   // 刷新 threshold 输入框显示
+            MessageBox.Show(this, report + $"\n\n已将 threshold 设为 {thr:F2}",
+                "推荐阈值分析结果", MessageBoxButton.OK, MessageBoxImage.Information);
+        };
+        panel.Children.Add(btn);
+        panel.Children.Add(hint);
+        ParamPanel.Children.Add(panel);
     }
 
     /// <summary>TCP 节点：参数下方追加 启动监听/连接/停止 按钮与状态。</summary>

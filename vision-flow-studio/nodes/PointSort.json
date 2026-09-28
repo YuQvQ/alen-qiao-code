@@ -1,0 +1,17 @@
+{
+  "type_id": "PointSort",
+  "display_name": "点排序",
+  "category": "工具",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "PointSort" },
+  "inputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "待排序的点组（如模板匹配 centers）" },
+    { "name": "image", "type": "Image", "required": false, "description": "可选：关联图像，用于在图上绘制排序后的 index" }
+  ],
+  "outputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "排序后的点组（先按Y分行、再按X升序）" },
+    { "name": "count", "type": "Int", "required": true, "description": "点的数量" }
+  ],
+  "parameters": [
+    { "name": "row_tolerance", "type": "Double", "default": 20.0, "description": "Y方向分行容差(像素)。>0 时把Y相近的点视为同一行再按X排；<=0 时严格先Y后X" }
+  ]
+}

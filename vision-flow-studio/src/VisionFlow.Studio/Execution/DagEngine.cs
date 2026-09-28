@@ -125,8 +125,8 @@ public sealed class DagEngine
             {
                 if (ct.IsCancellationRequested) break;
 
-                // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端
-                if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If")
+                // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端 / PointSort
+                if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort")
                 {
                     results.Add(RunManagedNode(node, iter, loopCount));
                     continue;
@@ -219,6 +219,66 @@ public sealed class DagEngine
                     node.OutputCache["false"] = cond ? null : obj;
                     Logger.Info("DagEngine", $"  If 条件={cond} → 数据进入{(cond ? "true" : "false")} 分支");
                     break;
+                case "PointSort":
+                {
+                    // 点排序：先按 Y 分行，再按 X 升序。
+                    // 分行用“Y 间隙聚类”：按 Y 排序后，相邻点 Y 差超过容差则另起一行。
+                    // 比 round(y/tol) 更抗透视/漂移，避免行被错误合并或拆分。
+                    var raw = GetInputValue(node, "points");
+                    var pts = (raw as VzPoint2D[] ?? Array.Empty<VzPoint2D>()).ToList();
+                    node.InputCache["points"] = pts.ToArray();
+                    double tol = PDouble(node, "row_tolerance", 20.0);
+
+                    VzPoint2D[] sorted;
+                    if (pts.Count == 0)
+                    {
+                        sorted = Array.Empty<VzPoint2D>();
+                    }
+                    else if (tol <= 0)
+                    {
+                        sorted = pts.OrderBy(p => p.y).ThenBy(p => p.x).ToArray();
+                    }
+                    else
+                    {
+                        var byY = pts.OrderBy(p => p.y).ToList();
+                        // 自动估计典型行距：相邻点 Y 差中大于 minGap 的那些差值取中位数。
+                        // 同行内相邻点的 Y 抖动通常 < minGap 被过滤，剩下的多为换行差，中位数即行距。
+                        double minGap = tol;
+                        var gaps = new List<double>();
+                        for (int i = 1; i < byY.Count; i++)
+                        {
+                            double d = byY[i].y - byY[i - 1].y;
+                            if (d > minGap) gaps.Add(d);
+                        }
+                        double rowGap = gaps.Count > 0
+                            ? gaps.OrderBy(x => x).ElementAt(gaps.Count / 2)
+                            : minGap * 2.0;
+                        double threshold = rowGap * 0.5;
+
+                        // 分行：按 Y 排序后，当前点与当前行最大 Y 的差 > threshold 则另起一行。
+                        // 用 maxY（而非平均Y）更稳定，避免透视下某点拉偏均值。
+                        var rows = new List<List<VzPoint2D>>();
+                        double rowMaxY = double.NegativeInfinity;
+                        foreach (var p in byY)
+                        {
+                            if (rows.Count == 0 || p.y - rowMaxY > threshold)
+                            {
+                                rows.Add(new List<VzPoint2D> { p });
+                                rowMaxY = p.y;
+                            }
+                            else
+                            {
+                                rows[rows.Count - 1].Add(p);
+                                if (p.y > rowMaxY) rowMaxY = p.y;
+                            }
+                        }
+                        sorted = rows.SelectMany(r => r.OrderBy(p => p.x)).ToArray();
+                    }
+                    node.OutputCache["points"] = sorted;
+                    node.OutputCache["count"] = sorted.Length;
+                    Logger.Info("DagEngine", $"  PointSort: {pts.Count} 点 → 排序后 {sorted.Length} (row_tolerance={tol})");
+                    break;
+                }
             }
             node.HasError = false;
             node.LastError = null;
@@ -240,6 +300,17 @@ public sealed class DagEngine
         {
             if (v is int i) return i;
             if (int.TryParse(v.ToString(), out var p)) return p;
+        }
+        return fallback;
+    }
+    private static double PDouble(Node node, string name, double fallback)
+    {
+        if (node.Parameters.TryGetValue(name, out var v) && v is not null)
+        {
+            if (v is double d) return d;
+            if (v is float f) return f;
+            if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var p)) return p;
         }
         return fallback;
     }
@@ -381,7 +452,7 @@ public sealed class DagEngine
                 blocked.Add(n);
                 continue;
             }
-            if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If")
+            if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort")
             {
                 results.Add(RunManagedNode(n, 0, 1));
                 continue;

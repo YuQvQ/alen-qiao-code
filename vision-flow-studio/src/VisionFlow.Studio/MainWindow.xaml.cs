@@ -265,10 +265,73 @@ public partial class MainWindow : Window
         {
             Owner = this,
             OnRoiDrawRequested = StartRoiDraw,
+            OnAnalyzeThreshold = AnalyzeThreshold,
         };
         dlg.ShowDialog();
         // 关闭后刷新画布悬浮标签（参数可能已改）
         CanvasHost.RefreshFloatingLabels();
+    }
+
+    /// <summary>
+    /// 模板匹配“分析推荐阈值”：临时用低阈值+大 max_count 跑一遍，
+    /// 采集所有候选匹配的分数，按分数断层推荐 threshold，并还原原参数。
+    /// </summary>
+    private (double threshold, string report)? AnalyzeThreshold(Node node)
+    {
+        if (_engine is null) return null;
+
+        // 暂存原参数
+        var hadThr = node.Parameters.TryGetValue("threshold", out var oldThr);
+        var hadMax = node.Parameters.TryGetValue("max_count", out var oldMax);
+
+        try
+        {
+            node.Parameters["threshold"] = "0.3";
+            node.Parameters["max_count"] = "2000";
+
+            var res = _engine.RunNodeWithUpstream(node);
+            if (res is null)
+                return (0.5, "节点执行未返回结果");
+
+            if (!node.OutputCache.TryGetValue("matches", out var mv)
+                || mv is not VzMatchResult[] matches || matches.Length == 0)
+                return null;
+
+            var scores = matches.Select(m => m.score).OrderByDescending(s => s).ToArray();
+            double rec = RecommendThreshold(scores);
+            int cnt = scores.Count(s => s >= rec);
+
+            string top = string.Join(", ", scores.Take(8).Select(s => s.ToString("F2")));
+            string report =
+                $"候选匹配数：{scores.Length}\n" +
+                $"Top 分数：{top}\n" +
+                $"推荐阈值：{rec:F2}（此时命中 {cnt} 个）";
+            return (rec, report);
+        }
+        finally
+        {
+            // 还原参数
+            if (hadThr) node.Parameters["threshold"] = oldThr!; else node.Parameters.Remove("threshold");
+            if (hadMax) node.Parameters["max_count"] = oldMax!; else node.Parameters.Remove("max_count");
+        }
+    }
+
+    /// <summary>按降序分数的最大断层推荐阈值：取断层中点，落在高分组与低分噪点之间。</summary>
+    private static double RecommendThreshold(double[] scores)
+    {
+        if (scores.Length == 0) return 0.5;
+        if (scores.Length == 1) return Math.Clamp(scores[0] * 0.9, 0.5, 0.95);
+
+        var s = scores.OrderByDescending(x => x).ToArray();
+        int best = 0; double bestGap = -1;
+        int limit = Math.Min(s.Length - 1, 64);
+        for (int i = 0; i < limit; i++)
+        {
+            double gap = s[i] - s[i + 1];
+            if (gap > bestGap) { bestGap = gap; best = i; }
+        }
+        double rec = (s[best] + s[best + 1]) / 2.0;
+        return Math.Clamp(rec, 0.4, 0.98);
     }
 
     /// <summary>
@@ -341,12 +404,52 @@ public partial class MainWindow : Window
         dlg.ShowDialog();
     }
 
+    /// <summary>取某节点“最适合显示”的图像：result_image → 任意 Image 输出 → 上游 image 输入。</summary>
+    private VzImage? GetBestImageOf(Node n, out string? label)
+    {
+        label = null;
+        var rip = n.FindOutput("result_image");
+        if (rip is not null && n.OutputCache.TryGetValue(rip.Name, out var rv)
+            && rv is VzImage ri && ri.data != IntPtr.Zero)
+        { label = $"{n.DisplayName}.{rip.Name}"; return ri; }
+        foreach (var o in n.Outputs)
+        {
+            if (o.Type.Name == "Image" && n.OutputCache.TryGetValue(o.Name, out var iv)
+                && iv is VzImage im && im.data != IntPtr.Zero)
+            { label = $"{n.DisplayName}.{o.Name}"; return im; }
+        }
+        var iip = n.FindInput("image");
+        if (iip is not null)
+        {
+            var e = _graph.EdgesInto(n).FirstOrDefault(x => x.To.Name == "image");
+            if (e is not null && e.From.Owner.OutputCache.TryGetValue(e.From.Name, out var uv)
+                && uv is VzImage ui && ui.data != IntPtr.Zero)
+            { label = $"{e.From.Owner.DisplayName}.{e.From.Name}"; return ui; }
+        }
+        return null;
+    }
+
     /// <summary>
     /// 如果节点 OutputCache 里有 image 输出端口，把第一张图绘制到 ImageHost。
     /// 用于：选中节点时自动预览；运行完成后立即绘制。
     /// </summary>
     private void TryShowImageOutputToHost(Node? node)
     {
+        // 纯数据节点（如 PointSort）自身无图：从“产生空间数据的上游节点”反查其所用图像，
+        // 保证叠加层坐标与点/矩形在同一坐标空间。
+        VzImage? TryImageFromSpatialProducer(Node n, out string? label)
+        {
+            label = null;
+            foreach (var portName in new[] { "points", "centers", "point", "corners" })
+            {
+                var e = _graph.EdgesInto(n).FirstOrDefault(x => x.To.Name == portName);
+                if (e is null) continue;
+                var img = GetBestImageOf(e.From.Owner, out label);
+                if (img is not null) return img;
+            }
+            return null;
+        }
+
         if (node is null)
         {
             ImageHost.ActiveNode = null;
@@ -368,9 +471,38 @@ public partial class MainWindow : Window
             && node.OutputCache.TryGetValue(resultImgPort.Name, out var riVal)
             && riVal is VzImage rImg && rImg.data != IntPtr.Zero)
         {
+            // 有匹配/矩形结果时，优先把标注画到图上（OverlayRenderer 不处理 TemplateMatch 等）
+            if (matchesPort is not null
+                && node.OutputCache.TryGetValue(matchesPort.Name, out var rmVal)
+                && rmVal is VzMatchResult[] rmatches && rmatches.Length > 0)
+            {
+                ImageHost.ShowImageWithMatches(ref rImg, rmatches,
+                    sourceLabel: $"{node.DisplayName}.result_image");
+                return;
+            }
+            if (rectsPort is not null
+                && node.OutputCache.TryGetValue(rectsPort.Name, out var rrVal)
+                && rrVal is VzRect[] rrects && rrects.Length > 0)
+            {
+                ImageHost.ShowImageWithRects(ref rImg, rrects,
+                    sourceLabel: $"{node.DisplayName}.result_image");
+                return;
+            }
             ImageHost.ShowImageWithOverlay(ref rImg, node,
                 sourceLabel: $"{node.DisplayName}.result_image");
             return;
+        }
+
+        // 纯数据节点（PointSort / IndexSelector）：优先用“产生点的上游节点”的图像叠加，
+        // 确保编号/十字与点在同一坐标空间（即便本节点另接了 image 也以此为准）。
+        if (node.TypeId is "PointSort" or "IndexSelector")
+        {
+            var prodImg = TryImageFromSpatialProducer(node, out var prodLabel);
+            if (prodImg is VzImage pimg)
+            {
+                ImageHost.ShowImageWithOverlay(ref pimg, node, sourceLabel: prodLabel ?? "");
+                return;
+            }
         }
 
         // 取上游 image（不管本节点有没有 image 输出，都尝试找上游原图）
