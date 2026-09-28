@@ -56,7 +56,21 @@ int FeatureMatchAlgo::process() {
     count_ = (int)src.size();
     for (auto& p : src) { VzPoint2D v{}; v.x = p.x; v.y = p.y; tpl_pts_.push_back(v); }
     for (auto& p : dst) { VzPoint2D v{}; v.x = p.x; v.y = p.y; tgt_pts_.push_back(v); }
+
+    // 在目标图上绘制匹配特征点（保证 result_image 一定可视化，不依赖 UI 叠加层）
     result_image_ = image_.clone();
+    if (result_image_.channels() == 1) cv::cvtColor(result_image_, result_image_, cv::COLOR_GRAY2BGR);
+    cv::Scalar col = draw_color_;
+    int thk = std::max(1, draw_thickness_);
+    int r = 4 + thk;
+    for (size_t i = 0; i < dst.size(); ++i) {
+        cv::Point c((int)std::round(dst[i].x), (int)std::round(dst[i].y));
+        cv::circle(result_image_, c, r, col, thk);
+        cv::line(result_image_, cv::Point(c.x - r - 2, c.y), cv::Point(c.x + r + 2, c.y), col, thk);
+        cv::line(result_image_, cv::Point(c.x, c.y - r - 2), cv::Point(c.x, c.y + r + 2), col, thk);
+    }
+    cv::putText(result_image_, "FeatureMatch: " + std::to_string(count_) + " pairs",
+                cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 1.0, col, 2);
     return VZ_OK;
 }
 int FeatureMatchAlgo::getOutput(const std::string& p, void** o, int* n, int* tt) {
