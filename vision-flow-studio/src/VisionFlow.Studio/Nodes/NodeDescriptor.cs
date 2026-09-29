@@ -73,6 +73,77 @@ public sealed class NodeDescriptor
     }
 
     public override string ToString() => $"{DisplayName} ({TypeId})";
+
+    // ---------- 界面本地化（节点库显示）----------
+    /// <summary>当前界面语言下的显示名（中/英）。</summary>
+    [JsonIgnore]
+    public string DisplayNameLocalized
+        => NodeI18n.CurrentLang == "en" ? (NodeI18n.EnName(TypeId) ?? DisplayName) : DisplayName;
+
+    /// <summary>当前界面语言下的分类名（中/英），用于节点库分组。</summary>
+    [JsonIgnore]
+    public string CategoryLocalized
+        => NodeI18n.CurrentLang == "en" ? NodeI18n.EnCategory(Category) : Category;
+}
+
+/// <summary>节点库本地化：英文名称/分类映射。语言切换由 MainWindow 设置 CurrentLang 后刷新视图。</summary>
+public static class NodeI18n
+{
+    public static string CurrentLang = "zh";
+
+    public static string EnCategory(string zh) => zh switch
+    {
+        "源" => "Source",
+        "预处理" => "Preprocess",
+        "边缘" => "Edge",
+        "几何" => "Geometry",
+        "分析" => "Analysis",
+        "定位" => "Locate",
+        "对位" => "Alignment",
+        "测量" => "Measure",
+        "数学" => "Math",
+        "深度学习" => "Deep Learning",
+        "识别" => "Recognize",
+        "显示" => "Display",
+        "工具" => "Utility",
+        "逻辑" => "Logic",
+        _ => zh,
+    };
+
+    private static readonly Dictionary<string, string> _en = new()
+    {
+        { "ImageSource", "Image Source" }, { "CameraSource", "Camera" },
+        { "ForLoop", "For Loop" }, { "Counter", "Counter" }, { "Accumulator", "Accumulator" },
+        { "ConstString", "Const String" }, { "ConstNumber", "Const Number" }, { "ConstInteger", "Const Integer" },
+        { "IfCondition", "If Condition" }, { "IndexSelector", "Index Selector" },
+        { "PointSort", "Point Sort" }, { "TextOutput", "Text Output" },
+        { "MathFunc", "Math Function" }, { "MathOp", "Math Operation" },
+        { "ImageDisplay", "Image Display" },
+        { "ImageFlip", "Image Flip" }, { "ImageMath", "Image Math" }, { "ImageRotate", "Image Rotate" },
+        { "ImageResize", "Image Resize" }, { "RoiCrop", "ROI Crop" },
+        { "CannyEdge", "Canny Edge" }, { "SobelEdge", "Sobel Edge" },
+        { "AdaptiveThreshold", "Adaptive Threshold" }, { "BilateralFilter", "Bilateral Filter" },
+        { "BinThreshold", "Binarize" }, { "ConvertColor", "Convert Color" },
+        { "GaussianBlur", "Gaussian Blur" }, { "Grayscale", "Grayscale" },
+        { "HistEqualize", "Histogram Equalize" }, { "Invert", "Invert" },
+        { "MedianBlur", "Median Blur" }, { "Morphology", "Morphology" }, { "Threshold", "Threshold" },
+        { "BlobAnalysis", "Blob Analysis" }, { "CircleFind", "Circle Find" }, { "ColorDetect", "Color Detect" },
+        { "ConnectedComponents", "Connected Components" }, { "ConvexHull", "Convex Hull" },
+        { "CornerDetect", "Corner Detect" }, { "DistanceTransform", "Distance Transform" },
+        { "FindContours", "Find Contours" }, { "LineFind", "Line Find" },
+        { "MinMaxLoc", "Min/Max Loc" }, { "PixelStats", "Pixel Stats" },
+        { "PositionTracking", "Position Tracking" }, { "RectangleDetect", "Rectangle Detect" },
+        { "TemplateMatch", "Template Match" },
+        { "AngleMeasure", "Angle Measure" }, { "CircleFit", "Circle Fit" },
+        { "DistanceMeasure", "Distance Measure" }, { "EdgeFinder", "Edge Finder" },
+        { "FeatureMatch", "Feature Match" }, { "LineAngle", "Line Angle" },
+        { "LineFit", "Line Fit" }, { "LineIntersect", "Line Intersect" }, { "ShapeMatch", "Shape Match" },
+        { "AreaMeasure", "Area Measure" },
+        { "DnnClassify", "DNN Classify" }, { "DnnDetect", "DNN Detect" },
+        { "QrCodeDetect", "QR Code Detect" },
+    };
+
+    public static string? EnName(string typeId) => _en.TryGetValue(typeId, out var v) ? v : null;
 }
 
 /// <summary>

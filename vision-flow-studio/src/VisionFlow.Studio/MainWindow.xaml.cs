@@ -38,6 +38,84 @@ public partial class MainWindow : Window
         Logger.Instance.LogAppended += OnLogAppended;
     }
 
+    // ============================================================
+    // 界面语言切换（中 / 英），选择持久化到 ui_lang.setting
+    // ============================================================
+    private string _currentLang = "zh";
+    private bool _langReady;
+
+    private static readonly IReadOnlyDictionary<string, string> Zh = new Dictionary<string, string>
+    {
+        { "new", "新建" }, { "open", "打开" }, { "save", "保存" },
+        { "run", "连续运行" }, { "runOnce", "运行一次" }, { "stop", "停止" },
+        { "fit", "适应" }, { "actual", "1:1" },
+        { "lib", "节点库" }, { "log", "日志" }, { "clear", "清空" }, { "autoScroll", "自动滚动" },
+        { "entries", "{0} 条" }, { "ready", "就绪" },
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> En = new Dictionary<string, string>
+    {
+        { "new", "New" }, { "open", "Open" }, { "save", "Save" },
+        { "run", "Run" }, { "runOnce", "Run Once" }, { "stop", "Stop" },
+        { "fit", "Fit" }, { "actual", "1:1" },
+        { "lib", "Node Library" }, { "log", "Log" }, { "clear", "Clear" }, { "autoScroll", "Auto Scroll" },
+        { "entries", "{0} entries" }, { "ready", "Ready" },
+    };
+
+    private IReadOnlyDictionary<string, string> L => _currentLang == "en" ? En : Zh;
+    private string LangFile => Path.Combine(AppContext.BaseDirectory, "ui_lang.setting");
+
+    private void LoadLang()
+    {
+        try { if (File.Exists(LangFile)) _currentLang = File.ReadAllText(LangFile).Trim() == "en" ? "en" : "zh"; }
+        catch { /* 忽略，默认中文 */ }
+    }
+    private void SaveLang()
+    {
+        try { File.WriteAllText(LangFile, _currentLang); } catch { /* 忽略 */ }
+    }
+
+    private void LangToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_langReady) return;
+        if (sender is Button b && b.Tag is string tag && tag != _currentLang)
+        {
+            _currentLang = tag;
+            ApplyLanguage();
+            SaveLang();
+        }
+    }
+
+    /// <summary>按当前语言高亮“中 / EN”分段开关的选中段。</summary>
+    private void UpdateLangToggle()
+    {
+        var brand = (Brush)FindResource("BrandBrush");
+        var muted = (Brush)FindResource("TextMutedBrush");
+        bool zh = _currentLang != "en";
+        LangZhBtn.Background = zh ? brand : Brushes.Transparent;
+        LangZhBtn.Foreground = zh ? Brushes.White : muted;
+        LangEnBtn.Background = zh ? Brushes.Transparent : brand;
+        LangEnBtn.Foreground = zh ? muted : Brushes.White;
+    }
+
+    private void ApplyLanguage()
+    {
+        LblNew.Text = L["new"]; LblOpen.Text = L["open"]; LblSave.Text = L["save"];
+        LblRun.Text = L["run"]; LblRunOnce.Text = L["runOnce"]; LblStop.Text = L["stop"];
+        LblFit.Text = L["fit"]; LblActual.Text = L["actual"];
+        LibTitleText.Text = L["lib"]; LogTitleText.Text = L["log"];
+        BtnClearLog.Content = L["clear"]; AutoScrollCheck.Content = L["autoScroll"];
+        UpdateLogCount();
+        // 节点库名称/分类随语言刷新
+        NodeI18n.CurrentLang = _currentLang;
+        _nodeView?.Refresh();
+        UpdateLangToggle();
+        if (StatusText.Text is "就绪" or "Ready") StatusText.Text = L["ready"];
+    }
+
+    private void UpdateLogCount()
+        => LogCountText.Text = string.Format(L["entries"], Logger.Instance.TotalCount);
+
     /// <summary>窗口关闭时自动保存当前方案到 autosave.vflow</summary>
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -86,7 +164,7 @@ public partial class MainWindow : Window
         else
         {
             Logger.Instance.AddToEntriesOnUiThread(entry);
-            LogCountText.Text = $"{Logger.Instance.TotalCount} 条";
+            UpdateLogCount();
             // 自动滚动到底（如果用户勾选）
             if (AutoScrollCheck.IsChecked == true && LogList.Items.Count > 0)
             {
@@ -98,11 +176,16 @@ public partial class MainWindow : Window
     private void BtnClearLog_Click(object sender, RoutedEventArgs e)
     {
         Logger.Instance.ClearEntries();
-        LogCountText.Text = $"{Logger.Instance.TotalCount} 条";
+        UpdateLogCount();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // 恢复界面语言（先激活语言逻辑，再应用一次，确保分段开关高亮正确）
+        LoadLang();
+        _langReady = true;
+        ApplyLanguage();
+
         Logger.Info("App", "VisionFlow.Studio 启动中…");
         // 1) 加载节点描述：先扫 nodes/*.json 离线装载
         var nodesDir = Path.Combine(AppContext.BaseDirectory, "nodes");
@@ -122,7 +205,7 @@ public partial class MainWindow : Window
         // 按分类分组显示节点库
         var nodes = NodeRegistry.Instance.All.ToList();
         var view = (System.Windows.Data.CollectionView)System.Windows.Data.CollectionViewSource.GetDefaultView(nodes);
-        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription("Category"));
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription("CategoryLocalized"));
         _nodeView = view;
         NodeLibraryList.ItemsSource = view;
 
@@ -202,8 +285,10 @@ public partial class MainWindow : Window
         {
             if (o is not NodeDescriptor d) return true;
             return (d.DisplayName ?? "").ToLowerInvariant().Contains(kw)
+                || (d.DisplayNameLocalized ?? "").ToLowerInvariant().Contains(kw)
                 || (d.TypeId ?? "").ToLowerInvariant().Contains(kw)
-                || (d.Category ?? "").ToLowerInvariant().Contains(kw);
+                || (d.Category ?? "").ToLowerInvariant().Contains(kw)
+                || (d.CategoryLocalized ?? "").ToLowerInvariant().Contains(kw);
         });
     }
 

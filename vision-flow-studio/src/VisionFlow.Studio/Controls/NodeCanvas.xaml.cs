@@ -93,6 +93,10 @@ public partial class NodeCanvas : Canvas
     private Point _panStartScreen;
     private Point _panStartTranslate;
 
+    // 网格背景：用单个 Rectangle + DrawingBrush 平铺，避免每帧创建上千个 Ellipse
+    private Rectangle? _gridRect;
+    private DrawingBrush? _gridBrush;
+
     public NodeCanvas()
     {
         InitializeComponent();
@@ -230,49 +234,39 @@ public partial class NodeCanvas : Canvas
         }
     }
 
-    // 点阵网格背景：在 GridLayer 上绘制，不受变换影响，始终铺满可视区域
+    // 点阵网格背景：用单个 Rectangle + DrawingBrush 平铺，随平移/缩放更新笔刷参数。
+    // 相比“每帧创建上千个 Ellipse”，这里平移只改一个 TranslateTransform，极其轻量。
     private void DrawGrid()
     {
-        GridLayer.Children.Clear();
-        var brush = new SolidColorBrush(Color.FromRgb(0xCB, 0xCB, 0xD5)) { Opacity = 0.4 };
-        double step = 16;
         double w = ActualWidth;
         double h = ActualHeight;
         if (w <= 0 || h <= 0) return;
 
-        // 网格点也要跟随缩放和平移（在屏幕坐标空间绘制）
-        // 屏幕坐标 = 逻辑坐标 * scale + translate
-        // 所以逻辑网格点 (ix, iy) 对应的屏幕坐标 = (ix*scale+tx, iy*scale+ty)
-        double s = _scale;
-        double tx = _translateTransform.X;
-        double ty = _translateTransform.Y;
-
-        // 计算屏幕可视区域内需要绘制的逻辑点范围
-        double startIX = Math.Floor((0 - tx) / (step * s)) * step;
-        double startIY = Math.Floor((0 - ty) / (step * s)) * step;
-        double endIX = Math.Ceiling((w - tx) / (step * s)) * step;
-        double endIY = Math.Ceiling((h - ty) / (step * s)) * step;
-
-        var ellipseSize = Math.Max(1.0, 1.5 * s);
-        for (double iy = startIY; iy <= endIY; iy += step)
+        if (_gridBrush is null)
         {
-            for (double ix = startIX; ix <= endIX; ix += step)
+            var dotBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xCB, 0xD5)) { Opacity = 0.4 };
+            dotBrush.Freeze();
+            var dg = new DrawingGroup();
+            using (var dc = dg.Open())
+                dc.DrawEllipse(dotBrush, null, new Point(0, 0), 1.0, 1.0); // 圆点（半径1）
+            dg.Freeze();
+            _gridBrush = new DrawingBrush(dg)
             {
-                double sx = ix * s + tx;
-                double sy = iy * s + ty;
-                if (sx < -5 || sx > w + 5 || sy < -5 || sy > h + 5) continue;
-                var ell = new Ellipse
-                {
-                    Width = ellipseSize,
-                    Height = ellipseSize,
-                    Fill = brush,
-                    IsHitTestVisible = false,
-                };
-                Canvas.SetLeft(ell, sx - ellipseSize / 2);
-                Canvas.SetTop(ell, sy - ellipseSize / 2);
-                GridLayer.Children.Add(ell);
-            }
+                TileMode = TileMode.Tile,
+                ViewportUnits = BrushMappingMode.Absolute,
+                Stretch = Stretch.None,
+            };
+            _gridRect = new Rectangle { IsHitTestVisible = false, Fill = _gridBrush };
+            GridLayer.Children.Add(_gridRect);
         }
+
+        const double step = 16;
+        double s = _scale;
+        double tile = Math.Max(2.0, step * s);   // 缩放越大点越稀
+        _gridRect!.Width = w;
+        _gridRect.Height = h;
+        _gridBrush.Viewport = new Rect(-1.0, -1.0, tile, tile); // 圆点在每格左上角，留出半径避免裁剪
+        _gridBrush.Transform = new TranslateTransform(_translateTransform.X, _translateTransform.Y);
     }
 
     // ============================================================
@@ -699,10 +693,11 @@ public partial class NodeCanvas : Canvas
             var label = CreateFloatingLabel(text, labelFont, brandBrush);
             var labelW = label.DesiredSize.Width;
             var labelH = label.DesiredSize.Height;
-            SetLeft(label, Math.Max(0, anchor.X - labelW - 24));
+            // 紧贴节点左侧：标签右边缘距端口 8px（不钳制到 0，避免节点靠左时标签被推远脱离节点）
+            SetLeft(label, anchor.X - labelW - 8);
             SetTop(label, anchor.Y - labelH / 2);
             var arrow = CreateArrow(
-                new Point(anchor.X - 24, anchor.Y),
+                new Point(anchor.X - 8, anchor.Y),
                 anchor, brandBrush);
             var info = new FloatingLabelInfo
             {
@@ -726,10 +721,11 @@ public partial class NodeCanvas : Canvas
             var text = $"{p.Name} : {p.Type.Name}\n  → {valStr}";
             var label = CreateFloatingLabel(text, labelFont, brandBrush);
             var labelH = label.DesiredSize.Height;
-            SetLeft(label, anchor.X + 24);
+            // 紧贴节点右侧：标签左边缘距端口 8px
+            SetLeft(label, anchor.X + 8);
             SetTop(label, anchor.Y - labelH / 2);
             var arrow = CreateArrow(
-                new Point(anchor.X + 24, anchor.Y),
+                new Point(anchor.X + 8, anchor.Y),
                 anchor, brandBrush);
             var info = new FloatingLabelInfo
             {

@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -12,9 +14,16 @@ namespace VisionFlow.Studio.Interop;
 /// </summary>
 public static class VzImageConverter
 {
+    // 允许捕获 AccessViolation 等损坏状态异常：原生图像缓冲可能已失效，
+    // 此时应返回 null 而不是让整个进程崩溃。
+    [HandleProcessCorruptedStateExceptions, SecurityCritical]
     public static BitmapSource? ToBitmapSource(ref VzImage img)
     {
+        // 基础合法性校验：指针为空、维度异常、通道数非法 → 直接放弃
         if (img.data == IntPtr.Zero) return null;
+        if (img.width <= 0 || img.height <= 0 || img.width > 100000 || img.height > 100000) return null;
+        if (img.channels is not (1 or 3 or 4)) return null;
+
         PixelFormat fmt = img.channels switch
         {
             1 => PixelFormats.Gray8,
@@ -28,46 +37,51 @@ public static class VzImageConverter
         int srcStride = (int)img.step;
         if (srcStride <= 0) srcStride = width * bytesPerPixel;
 
-        var wb = new WriteableBitmap(width, height, 96, 96, fmt, null);
-        int dstStride = wb.BackBufferStride;
-        int rowBytes = width * bytesPerPixel;
-        Execution.Logger.Info("VzImageConverter",
-            $"ToBitmapSource: img={width}x{height}x{img.channels}, step={img.step}, srcStride={srcStride}, dstStride={dstStride}, bytesPerPixel={bytesPerPixel}");
-
-        // 使用 Lock/Unlock + Marshal.Copy（与 DrawRectsOnBitmap 的 Lock/Unlock 兼容）
-        wb.Lock();
         try
         {
-            unsafe
+            var wb = new WriteableBitmap(width, height, 96, 96, fmt, null);
+            int dstStride = wb.BackBufferStride;
+            int rowBytes = width * bytesPerPixel;
+
+            // 使用 Lock/Unlock + Marshal.Copy（与 DrawRectsOnBitmap 的 Lock/Unlock 兼容）
+            wb.Lock();
+            try
             {
-                byte* dst = (byte*)wb.BackBuffer;
-                if (srcStride == dstStride)
+                unsafe
                 {
-                    // stride 相同：用 Marshal.Copy 经托管数组中转（对大图更可靠）
-                    long totalSize = (long)srcStride * height;
-                    byte[] buffer = new byte[totalSize];
-                    Marshal.Copy(img.data, buffer, 0, (int)totalSize);
-                    // 托管数组 → BackBuffer
-                    Marshal.Copy(buffer, 0, (IntPtr)dst, (int)totalSize);
-                }
-                else
-                {
-                    // stride 不同：逐行拷贝
-                    for (int y = 0; y < height; y++)
+                    byte* dst = (byte*)wb.BackBuffer;
+                    if (srcStride == dstStride)
                     {
-                        byte* srcRow = (byte*)img.data + y * srcStride;
-                        byte* dstRow = dst + y * dstStride;
-                        System.Buffer.MemoryCopy(srcRow, dstRow, rowBytes, rowBytes);
+                        long totalSize = (long)srcStride * height;
+                        if (totalSize <= 0 || totalSize > int.MaxValue) return null;
+                        byte[] buffer = new byte[totalSize];
+                        Marshal.Copy(img.data, buffer, 0, (int)totalSize);
+                        Marshal.Copy(buffer, 0, (IntPtr)dst, (int)totalSize);
+                    }
+                    else
+                    {
+                        for (int y = 0; y < height; y++)
+                        {
+                            byte* srcRow = (byte*)img.data + y * srcStride;
+                            byte* dstRow = dst + y * dstStride;
+                            System.Buffer.MemoryCopy(srcRow, dstRow, rowBytes, rowBytes);
+                        }
                     }
                 }
+                wb.AddDirtyRect(new Int32Rect(0, 0, width, height));
             }
-            wb.AddDirtyRect(new Int32Rect(0, 0, width, height));
+            finally
+            {
+                wb.Unlock();
+            }
+            return wb;
         }
-        finally
+        catch (Exception ex)
         {
-            wb.Unlock();
+            // 捕获 AccessViolation / 其他读失败：原生缓冲失效，安全降级
+            Execution.Logger.Warn("VzImageConverter", $"ToBitmapSource 读取失败，跳过显示：{ex.Message}");
+            return null;
         }
-        return wb;
     }
 
     /// <summary>
