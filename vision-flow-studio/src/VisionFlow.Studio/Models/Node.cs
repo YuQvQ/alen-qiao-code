@@ -21,7 +21,15 @@ public sealed class Node : INotifyPropertyChanged
     public Guid InstanceId { get; } = Guid.NewGuid();
 
     public string TypeId { get; }
-    public string DisplayName { get; set; }
+
+    private string _displayName;
+    /// <summary>画布上显示的名称（可被右键“重命名”修改，不影响节点库定义）。</summary>
+    public string DisplayName
+    {
+        get => _displayName;
+        set => SetField(ref _displayName, value);
+    }
+
     public string Category { get; }
     public string AlgoName { get; }
     public string DllName { get; }    // 绑定的算法 DLL

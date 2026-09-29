@@ -326,6 +326,7 @@ public partial class NodeCanvas : Canvas
         ctrl.NodeDoubleClicked += c => NodeDoubleClicked?.Invoke(c);
         ctrl.NodeHelpRequested += c => NodeHelpRequested?.Invoke(c);
         ctrl.NodeToggleEnabledRequested += c => NodeToggleEnabledRequested?.Invoke(c);
+        ctrl.NodeRenameRequested += c => NodeRenameRequested?.Invoke(c);
         ctrl.NodeCopyRequested += c => NodeCopyRequested?.Invoke(c);
         ctrl.NodeDeleteRequested += c => NodeDeleteRequested?.Invoke(c);
         ContentCanvas.Children.Add(ctrl);
@@ -1017,6 +1018,8 @@ public partial class NodeCanvas : Canvas
 
     /// <summary>右键菜单：切换节点启用/禁用</summary>
     public event Action<NodeControl>? NodeToggleEnabledRequested;
+    /// <summary>右键菜单：重命名节点</summary>
+    public event Action<NodeControl>? NodeRenameRequested;
     /// <summary>右键菜单：复制节点</summary>
     public event Action<NodeControl>? NodeCopyRequested;
     /// <summary>右键菜单：删除节点</summary>

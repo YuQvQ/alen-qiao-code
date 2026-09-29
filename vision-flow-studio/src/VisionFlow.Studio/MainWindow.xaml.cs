@@ -135,6 +135,7 @@ public partial class MainWindow : Window
         CanvasHost.NodeRunRequested += OnNodeRunRequested;
         CanvasHost.NodeHelpRequested += OnNodeHelpRequested;
         CanvasHost.NodeToggleEnabledRequested += OnNodeToggleEnabledRequested;
+        CanvasHost.NodeRenameRequested += OnNodeRenameRequested;
         CanvasHost.NodeCopyRequested += OnNodeCopyRequested;
         CanvasHost.NodeDeleteRequested += OnNodeDeleteRequested;
         CanvasHost.NodePasteRequested += PasteNode;
@@ -287,6 +288,19 @@ public partial class MainWindow : Window
     // ============================================================
     // 节点右键菜单：启用/禁用、复制、删除
     // ============================================================
+    private void OnNodeRenameRequested(NodeControl ctrl)
+    {
+        if (ctrl.Node is not Node node) return;
+        var input = Microsoft.VisualBasic.Interaction.InputBox(
+            "请输入新的节点名称（仅修改画布上的显示名）：", "重命名节点", node.DisplayName);
+        var name = input?.Trim();
+        if (string.IsNullOrEmpty(name) || name == node.DisplayName) return;
+        node.DisplayName = name;
+        CanvasHost.RefreshFloatingLabels();
+        StatusText.Text = $"已重命名节点为：{name}";
+        Logger.Info("Canvas", $"节点重命名 -> '{name}' (type_id={node.TypeId})");
+    }
+
     private void OnNodeToggleEnabledRequested(NodeControl ctrl)
     {
         if (ctrl.Node is not Node node) return;

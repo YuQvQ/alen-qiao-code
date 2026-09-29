@@ -40,10 +40,13 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
         miEnable.Click += (s, e) => NodeToggleEnabledRequested?.Invoke(this);
         var miCopy = new MenuItem { Header = "复制节点" };
         miCopy.Click += (s, e) => NodeCopyRequested?.Invoke(this);
+        var miRename = new MenuItem { Header = "重命名节点" };
+        miRename.Click += (s, e) => NodeRenameRequested?.Invoke(this);
         var miDelete = new MenuItem { Header = "删除节点" };
         miDelete.Click += (s, e) => NodeDeleteRequested?.Invoke(this);
 
         menu.Items.Add(miEnable);
+        menu.Items.Add(miRename);
         menu.Items.Add(new Separator());
         menu.Items.Add(miCopy);
         menu.Items.Add(miDelete);
@@ -183,6 +186,8 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
     public event Action<NodeControl>? NodeToggleEnabledRequested;
     /// <summary>右键菜单：复制节点</summary>
     public event Action<NodeControl>? NodeCopyRequested;
+    /// <summary>右键菜单：重命名节点</summary>
+    public event Action<NodeControl>? NodeRenameRequested;
     /// <summary>右键菜单：删除节点</summary>
     public event Action<NodeControl>? NodeDeleteRequested;
 
