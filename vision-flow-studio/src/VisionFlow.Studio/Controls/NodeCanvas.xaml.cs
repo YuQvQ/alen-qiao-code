@@ -106,6 +106,13 @@ public partial class NodeCanvas : Canvas
         ContentCanvas.RenderTransform = tg;
         ContentCanvas.RenderTransformOrigin = new Point(0, 0);
 
+        // 画布空白处右键菜单：粘贴节点
+        var canvasMenu = new ContextMenu();
+        var miPaste = new MenuItem { Header = "粘贴节点" };
+        miPaste.Click += (s, e) => NodePasteRequested?.Invoke();
+        canvasMenu.Items.Add(miPaste);
+        ContextMenu = canvasMenu;
+
         // 监听键盘删除
         KeyDown += OnKeyDown;
         // 鼠标移动 + 释放（全局）
@@ -318,6 +325,9 @@ public partial class NodeCanvas : Canvas
         ctrl.NodeRunRequested += c => NodeRunRequested?.Invoke(c);
         ctrl.NodeDoubleClicked += c => NodeDoubleClicked?.Invoke(c);
         ctrl.NodeHelpRequested += c => NodeHelpRequested?.Invoke(c);
+        ctrl.NodeToggleEnabledRequested += c => NodeToggleEnabledRequested?.Invoke(c);
+        ctrl.NodeCopyRequested += c => NodeCopyRequested?.Invoke(c);
+        ctrl.NodeDeleteRequested += c => NodeDeleteRequested?.Invoke(c);
         ContentCanvas.Children.Add(ctrl);
         SetLeft(ctrl, node.X);
         SetTop(ctrl, node.Y);
@@ -1004,6 +1014,16 @@ public partial class NodeCanvas : Canvas
 
     /// <summary>用户点击节点上的"?"帮助按钮时触发</summary>
     public event Action<NodeControl>? NodeHelpRequested;
+
+    /// <summary>右键菜单：切换节点启用/禁用</summary>
+    public event Action<NodeControl>? NodeToggleEnabledRequested;
+    /// <summary>右键菜单：复制节点</summary>
+    public event Action<NodeControl>? NodeCopyRequested;
+    /// <summary>右键菜单：删除节点</summary>
+    public event Action<NodeControl>? NodeDeleteRequested;
+
+    /// <summary>画布右键菜单 / Ctrl+V：粘贴节点</summary>
+    public event Action? NodePasteRequested;
 
     /// <summary>用户从节点库拖拽 NodeDescriptor 到画布时触发</summary>
     public event Action<Nodes.NodeDescriptor, Point>? NodeDropped;

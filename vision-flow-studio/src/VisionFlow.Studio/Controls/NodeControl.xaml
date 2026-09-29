@@ -32,6 +32,13 @@
                                             Converter={x:Static local:BoolToVisibilityConverter.Instance}}"
                                ToolTip="{Binding ErrorToolTip,
                                           RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    <!-- 禁用标识：Enabled=false 时显示"已禁用" -->
+                    <TextBlock DockPanel.Dock="Right" Text="已禁用" FontSize="10"
+                               Foreground="#FFD0D0" Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding IsDisabled,
+                                            RelativeSource={RelativeSource AncestorType=UserControl},
+                                            Converter={x:Static local:BoolToVisibilityConverter.Instance}}" />
                     <!-- 手动运行本节点按钮 -->
                     <Button DockPanel.Dock="Right" Content="▶"
                             Width="22" Height="20" Padding="0"

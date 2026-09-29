@@ -1,0 +1,14 @@
+{
+  "type_id": "ConstString",
+  "display_name": "常量字符串",
+  "category": "工具",
+  "icon": "icons/const.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConstString" },
+  "inputs": [],
+  "outputs": [
+    { "name": "value", "type": "String", "required": true, "description": "输出的字符串常量" }
+  ],
+  "parameters": [
+    { "name": "value", "type": "String", "default": "", "description": "要输出的字符串值" }
+  ]
+}

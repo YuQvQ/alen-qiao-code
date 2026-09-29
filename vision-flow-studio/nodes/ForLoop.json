@@ -3,13 +3,15 @@
   "display_name": "For循环",
   "category": "逻辑",
   "algo_binding": { "dll": "vision_algo", "algo_name": "ForLoop" },
-  "inputs": [],
+  "inputs": [
+    { "name": "count", "type": "Int", "required": false, "description": "循环次数(由上游传入，如模板匹配的数量)；未连接时用参数 count" }
+  ],
   "outputs": [
     { "name": "index", "type": "Int", "required": true, "description": "当前迭代序号(0..count-1)" },
     { "name": "count", "type": "Int", "required": true, "description": "总循环次数" }
   ],
   "parameters": [
-    { "name": "count", "type": "Int", "default": 1, "description": "循环次数(>=1)" },
-    { "name": "interval_ms", "type": "Int", "default": 0, "description": "每次迭代间隔(毫秒),用于定时连续采集" }
+    { "name": "count", "type": "Int", "default": 1, "description": "循环次数(输入端口未连接时的默认值，>=1)" },
+    { "name": "interval_ms", "type": "Int", "default": 0, "description": "每次迭代间隔(毫秒)，>0 时每轮之间等待" }
   ]
 }

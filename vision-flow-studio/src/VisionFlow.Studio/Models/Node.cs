@@ -26,6 +26,14 @@ public sealed class Node : INotifyPropertyChanged
     public string AlgoName { get; }
     public string DllName { get; }    // 绑定的算法 DLL
 
+    // 是否启用（右键菜单可切换）。false 时 DagEngine 跳过该节点（视为未就绪）。
+    private bool _enabled = true;
+    public bool Enabled
+    {
+        get => _enabled;
+        set => SetField(ref _enabled, value);
+    }
+
     public double X { get; set; }
     public double Y { get; set; }
 

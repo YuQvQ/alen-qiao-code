@@ -1,0 +1,14 @@
+{
+  "type_id": "ConstNumber",
+  "display_name": "常量数值",
+  "category": "工具",
+  "icon": "icons/const.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConstNumber" },
+  "inputs": [],
+  "outputs": [
+    { "name": "value", "type": "Double", "required": true, "description": "输出的数值常量(双精度)" }
+  ],
+  "parameters": [
+    { "name": "value", "type": "Double", "default": 0, "description": "要输出的数值" }
+  ]
+}

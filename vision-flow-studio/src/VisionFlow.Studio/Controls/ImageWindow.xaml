@@ -103,7 +103,8 @@
                         <TranslateTransform x:Name="ImgTranslate" X="0" Y="0"/>
                     </Grid.RenderTransform>
                     <Image x:Name="ImageView" Stretch="Fill"
-                           RenderOptions.BitmapScalingMode="HighQuality" />
+                           RenderOptions.BitmapScalingMode="LowQuality"
+                           RenderOptions.CachingHint="Cache" />
                     <Canvas x:Name="RoiCanvas"
                             IsHitTestVisible="True"
                             Background="Transparent"

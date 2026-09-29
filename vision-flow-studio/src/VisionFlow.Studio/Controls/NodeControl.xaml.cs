@@ -29,6 +29,27 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        BuildContextMenu();
+    }
+
+    private void BuildContextMenu()
+    {
+        var menu = new ContextMenu();
+
+        var miEnable = new MenuItem { Header = "启用节点" };
+        miEnable.Click += (s, e) => NodeToggleEnabledRequested?.Invoke(this);
+        var miCopy = new MenuItem { Header = "复制节点" };
+        miCopy.Click += (s, e) => NodeCopyRequested?.Invoke(this);
+        var miDelete = new MenuItem { Header = "删除节点" };
+        miDelete.Click += (s, e) => NodeDeleteRequested?.Invoke(this);
+
+        menu.Items.Add(miEnable);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(miCopy);
+        menu.Items.Add(miDelete);
+        // 打开前根据当前状态刷新"启用/禁用"文案
+        menu.Opened += (s, e) => miEnable.Header = (Node?.Enabled ?? true) ? "禁用节点" : "启用节点";
+        ContextMenu = menu;
     }
 
     /// <summary>当前绑定的 Node 实例（DataContext 即 Node）</summary>
@@ -120,12 +141,15 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
             newNode.PropertyChanged += OnNodePropertyChanged;
         // 初次绑定：同步一次
         SyncErrorState();
+        SyncDisabledState();
     }
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(Node.HasError) or nameof(Node.LastError))
             SyncErrorState();
+        else if (e.PropertyName is nameof(Node.Enabled))
+            SyncDisabledState();
     }
 
     private void SyncErrorState()
@@ -134,6 +158,13 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
         if (node is null) return;
         // SetCurrentValue 不覆盖绑定，但这里 IsError 没有外部 Binding，是纯 DP 写入
         SetCurrentValue(IsErrorProperty, node.HasError);
+    }
+
+    private void SyncDisabledState()
+    {
+        var node = Node;
+        if (node is null) return;
+        SetCurrentValue(IsDisabledProperty, !node.Enabled);
     }
 
     // ============================================================
@@ -147,6 +178,33 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
 
     /// <summary>用户点击"?"帮助按钮时触发</summary>
     public event Action<NodeControl>? NodeHelpRequested;
+
+    /// <summary>右键菜单：切换节点启用/禁用</summary>
+    public event Action<NodeControl>? NodeToggleEnabledRequested;
+    /// <summary>右键菜单：复制节点</summary>
+    public event Action<NodeControl>? NodeCopyRequested;
+    /// <summary>右键菜单：删除节点</summary>
+    public event Action<NodeControl>? NodeDeleteRequested;
+
+    // ============================================================
+    // 依赖属性：IsDisabled（节点被禁用时整体变灰 + 显示"已禁用"角标）
+    // ============================================================
+    public static readonly DependencyProperty IsDisabledProperty =
+        DependencyProperty.Register(
+            nameof(IsDisabled), typeof(bool), typeof(NodeControl),
+            new PropertyMetadata(false, OnIsDisabledChanged));
+
+    public bool IsDisabled
+    {
+        get => (bool)GetValue(IsDisabledProperty);
+        set => SetValue(IsDisabledProperty, value);
+    }
+
+    private static void OnIsDisabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var nc = (NodeControl)d;
+        nc.Opacity = (bool)e.NewValue ? 0.45 : 1.0;
+    }
 
     private void RunButton_Click(object sender, RoutedEventArgs e)
     {
@@ -192,6 +250,15 @@ public partial class NodeControl : UserControl, INotifyPropertyChanged
         canvas?.BeginDragNode(this, e.GetPosition(canvas));
         canvas?.SelectNode(this);
         e.Handled = true;
+    }
+
+    /// <summary>右键按下：先选中该节点，再让 ContextMenu 弹出</summary>
+    protected override void OnPreviewMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseRightButtonDown(e);
+        var canvas = FindAncestor<NodeCanvas>(this);
+        canvas?.SelectNode(this);
+        // 不设 Handled，保证 ContextMenu 正常弹出
     }
 
     private static T? FindAncestor<T>(DependencyObject d) where T : DependencyObject

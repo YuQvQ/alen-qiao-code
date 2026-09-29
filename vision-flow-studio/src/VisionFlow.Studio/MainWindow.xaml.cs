@@ -134,9 +134,21 @@ public partial class MainWindow : Window
         CanvasHost.NodeDoubleClicked += OnNodeDoubleClicked;
         CanvasHost.NodeRunRequested += OnNodeRunRequested;
         CanvasHost.NodeHelpRequested += OnNodeHelpRequested;
+        CanvasHost.NodeToggleEnabledRequested += OnNodeToggleEnabledRequested;
+        CanvasHost.NodeCopyRequested += OnNodeCopyRequested;
+        CanvasHost.NodeDeleteRequested += OnNodeDeleteRequested;
+        CanvasHost.NodePasteRequested += PasteNode;
+        PreviewKeyDown += OnMainPreviewKeyDown;
 
         // 4) 执行引擎
         _engine = new DagEngine(_graph);
+        // 每轮迭代（含 ForLoop 的每个 index）执行完后，实时把当前结果图刷到 UI，
+        // 这样循环里矩形检测等节点的检测位置会逐个显示，而不是只看到最后一帧。
+        _engine.OnAfterIteration = () =>
+        {
+            try { Dispatcher.Invoke(new Action(ShowRunResultImage), System.Windows.Threading.DispatcherPriority.Background); }
+            catch { /* 关闭/取消时忽略 */ }
+        };
         Logger.Info("DagEngine", "DAG 引擎就绪");
 
         // 订阅 ImageHost 的 ROI 变化事件：用户在图像窗口拖拽 ROI 后，
@@ -270,6 +282,83 @@ public partial class MainWindow : Window
         dlg.ShowDialog();
         // 关闭后刷新画布悬浮标签（参数可能已改）
         CanvasHost.RefreshFloatingLabels();
+    }
+
+    // ============================================================
+    // 节点右键菜单：启用/禁用、复制、删除
+    // ============================================================
+    private void OnNodeToggleEnabledRequested(NodeControl ctrl)
+    {
+        if (ctrl.Node is not Node node) return;
+        node.Enabled = !node.Enabled;
+        CanvasHost.RefreshFloatingLabels();
+        StatusText.Text = node.Enabled
+            ? $"已启用节点：{node.DisplayName}"
+            : $"已禁用节点：{node.DisplayName}（运行时将被跳过）";
+    }
+
+    // ============================================================
+    // 复制 / 粘贴（内部剪贴板）
+    // ============================================================
+    private sealed class NodeClipboard
+    {
+        public string TypeId = "";
+        public string DisplayName = "";
+        public Dictionary<string, object?> Params = new();
+        public double X;
+        public double Y;
+    }
+    private NodeClipboard? _clipboard;
+    private int _pasteCount;   // 连续粘贴的增量偏移计数
+
+    private void OnNodeCopyRequested(NodeControl ctrl)
+    {
+        if (ctrl.Node is Node src) CopyNode(src);
+    }
+
+    private void CopyNode(Node src)
+    {
+        _clipboard = new NodeClipboard
+        {
+            TypeId = src.TypeId,
+            DisplayName = src.DisplayName,
+            X = src.X,
+            Y = src.Y,
+            Params = new Dictionary<string, object?>(src.Parameters),
+        };
+        _pasteCount = 0;
+        StatusText.Text = $"已复制节点：{src.DisplayName}（Ctrl+V 或画布右键「粘贴节点」）";
+        Logger.Info("Canvas", $"复制节点 '{src.DisplayName}' 到剪贴板");
+    }
+
+    private void OnMainPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (e.Key == Key.V) { PasteNode(); e.Handled = true; }
+        else if (e.Key == Key.C && CanvasHost.SelectedNode is Node sel) { CopyNode(sel); e.Handled = true; }
+    }
+
+    private void PasteNode()
+    {
+        if (_clipboard is null) { StatusText.Text = "剪贴板为空，无可粘贴节点"; return; }
+        var cb = _clipboard;
+        _pasteCount++;
+        var clone = NodeFactory.CreateByTypeId(cb.TypeId, cb.X + 40 * _pasteCount, cb.Y + 40 * _pasteCount);
+        if (clone is null) { StatusText.Text = $"粘贴失败：未知节点类型 {cb.TypeId}"; return; }
+        foreach (var (k, v) in cb.Params)
+            clone.Parameters[k] = v;
+        _graph.AddNode(clone);
+        StatusText.Text = $"已粘贴节点：{clone.DisplayName}";
+        Logger.Info("Canvas", $"粘贴节点 '{cb.DisplayName}' -> @ ({clone.X:F0},{clone.Y:F0})");
+    }
+
+    private void OnNodeDeleteRequested(NodeControl ctrl)
+    {
+        if (ctrl.Node is not Node node) return;
+        var name = node.DisplayName;
+        _graph.RemoveNode(node);
+        StatusText.Text = $"已删除节点：{name}";
+        Logger.Info("Canvas", $"删除节点 '{name}'");
     }
 
     /// <summary>
@@ -1067,6 +1156,7 @@ public partial class MainWindow : Window
                     continue;
                 }
                 node.DisplayName = nd.DisplayName;
+                node.Enabled = nd.Enabled;
                 foreach (var (k, v) in nd.Parameters)
                 {
                     node.Parameters[k] = v;
@@ -1160,6 +1250,7 @@ public partial class MainWindow : Window
                     DllName = n.DllName,
                     X = n.X,
                     Y = n.Y,
+                    Enabled = n.Enabled,
                     Parameters = n.Parameters.ToDictionary(
                         kv => kv.Key,
                         kv => kv.Value?.ToString() ?? ""),
@@ -1229,6 +1320,7 @@ public partial class MainWindow : Window
         public string DllName { get; set; } = "";
         public double X { get; set; }
         public double Y { get; set; }
+        public bool Enabled { get; set; } = true;
         public Dictionary<string, string> Parameters { get; set; } = new();
     }
 

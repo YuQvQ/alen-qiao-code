@@ -1,0 +1,14 @@
+{
+  "type_id": "ConstInteger",
+  "display_name": "常量整数",
+  "category": "工具",
+  "icon": "icons/const.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "ConstInteger" },
+  "inputs": [],
+  "outputs": [
+    { "name": "value", "type": "Int", "required": true, "description": "输出的整数常量" }
+  ],
+  "parameters": [
+    { "name": "value", "type": "Int", "default": 0, "description": "要输出的整数" }
+  ]
+}

@@ -58,6 +58,13 @@ public sealed class DagEngine
 {
     private readonly Graph _graph;
 
+    // ForLoop 在第 0 轮从输入端口解析出的循环次数（数据驱动）。
+    private int _resolvedLoopCount;
+
+    /// <summary>每轮迭代（含 ForLoop 的每一次 index）执行完毕后触发，用于 UI 实时刷新显示。
+    /// 注意：在后台线程调用，订阅方需自行 Marshal 到 UI 线程。</summary>
+    public Action? OnAfterIteration;
+
     /// <summary>
     /// 失败策略：true=任一节点失败立即停止；false=继续跑下游（已失败的节点下游会因缺数据再次失败）。
     /// </summary>
@@ -93,69 +100,60 @@ public sealed class DagEngine
         }
         Logger.Info("DagEngine", $"拓扑序：[{string.Join(" → ", order.Select(n => n.DisplayName))}]");
 
-        // 检测 For 循环：图中任一 ForLoop 节点的 count 决定整张图重复执行次数，
-        // interval_ms 决定每次迭代之间的等待（用于定时连续采集）。
-        int loopCount = 1;
+        // 迭代间隔：取图中所有 ForLoop 节点 interval_ms 的最大值（参数配置）。
         int intervalMs = 0;
         foreach (var ln in _graph.Nodes)
         {
             if (ln.AlgoName != "ForLoop") continue;
-            if (ln.Parameters.TryGetValue("count", out var cv) && cv is not null
-                && int.TryParse(cv.ToString(), out var c) && c > 1 && c > loopCount)
-                loopCount = c;
             if (ln.Parameters.TryGetValue("interval_ms", out var iv) && iv is not null
                 && int.TryParse(iv.ToString(), out var im) && im > intervalMs)
                 intervalMs = im;
         }
-        if (loopCount > 1)
-            Logger.Info("DagEngine", $"检测到 ForLoop(count={loopCount}, interval={intervalMs}ms)，整图将循环执行 {loopCount} 次");
 
-        var results = new List<DagNodeResult>(order.Count * loopCount);
+        // count 由 ForLoop 的输入端口（数据驱动）决定：先跑第 0 轮，ForLoop 解析出 count，
+        // 写入 _resolvedLoopCount；随后再跑剩余迭代。未连接 count 输入时退化为参数默认值。
+        _resolvedLoopCount = 0;
+        var results = new List<DagNodeResult>(order.Count);
 
-        for (int iter = 0; iter < loopCount; iter++)
+        void RunIteration(int iter)
         {
-            if (loopCount > 1)
-                Logger.Info("DagEngine", $"━━━ 迭代 {iter + 1}/{loopCount} (index={iter}) ━━━");
-
             // blocked = failed + skipped；下游节点只要上游在 blocked 中就跳过
             // （保证 B 等 A 和 C 都成功产出数据后才能执行）
             var blocked = new HashSet<Node>();
-
             foreach (var node in order)
             {
                 if (ct.IsCancellationRequested) break;
 
-                // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端 / PointSort
-                if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort")
+                // 被用户禁用的节点直接跳过（不执行，下游也视为未就绪）
+                if (!node.Enabled)
                 {
-                    results.Add(RunManagedNode(node, iter, loopCount));
+                    Logger.Info("DagEngine", $"跳过 '{node.DisplayName}'：节点已禁用");
+                    results.Add(new DagNodeResult { Node = node, Skipped = true, Error = "node disabled" });
+                    blocked.Add(node);
                     continue;
                 }
 
-                // 上游任一未就绪（失败或跳过）→ 本节点跳过（不标红，不执行）
+                // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端 / PointSort
+                if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
+                    or "ConstString" or "ConstNumber" or "ConstInteger")
+                {
+                    results.Add(RunManagedNode(node, iter));
+                    continue;
+                }
+
                 var upstreamBlocked = _graph.EdgesInto(node)
                     .Any(e => blocked.Contains(e.From.Owner));
                 if (upstreamBlocked)
                 {
                     Logger.Warn("DagEngine", $"跳过 '{node.DisplayName}'：上游未就绪/已失败");
-                    results.Add(new DagNodeResult
-                    {
-                        Node = node,
-                        Skipped = true,
-                        Error = "upstream not ready"
-                    });
+                    results.Add(new DagNodeResult { Node = node, Skipped = true, Error = "upstream not ready" });
                     blocked.Add(node);
                     continue;
                 }
 
                 var r = RunNode(node);
                 results.Add(r);
-                if (r.Skipped)
-                {
-                    // 缺值跳过：不算失败、不标红，但下游也要跳过
-                    blocked.Add(node);
-                    continue;
-                }
+                if (r.Skipped) { blocked.Add(node); continue; }
                 if (!r.Success)
                 {
                     blocked.Add(node);
@@ -166,10 +164,22 @@ public sealed class DagEngine
                     }
                 }
             }
+        }
 
-            // 迭代间隔（用于定时连续采集），最后一次迭代后不再等待；可被取消
+        // 第 0 轮：执行全图，ForLoop 在此轮从输入解析 count 并输出 index=0
+        RunIteration(0);
+        OnAfterIteration?.Invoke();
+        int loopCount = Math.Max(1, _resolvedLoopCount);
+        if (loopCount > 1)
+            Logger.Info("DagEngine", $"检测到 ForLoop(count={loopCount}, interval={intervalMs}ms)，整图将循环执行 {loopCount} 次");
+
+        for (int iter = 1; iter < loopCount; iter++)
+        {
             if (ct.IsCancellationRequested) break;
-            if (intervalMs > 0 && iter < loopCount - 1)
+            Logger.Info("DagEngine", $"━━━ 迭代 {iter + 1}/{loopCount} (index={iter}) ━━━");
+
+            // 迭代间隔（最后一次迭代后不再等待）；可被取消
+            if (intervalMs > 0)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 while (sw.ElapsedMilliseconds < intervalMs)
@@ -178,6 +188,9 @@ public sealed class DagEngine
                     System.Threading.Thread.Sleep(10);
                 }
             }
+            if (ct.IsCancellationRequested) break;
+            RunIteration(iter);
+            OnAfterIteration?.Invoke();
         }
 
         return new DagRunResult { Results = results };
@@ -186,16 +199,29 @@ public sealed class DagEngine
     // ============================================================
     // 托管节点（C# 端执行）：ForLoop / TCP 服务端 / 客户端
     // ============================================================
-    private DagNodeResult RunManagedNode(Node node, int iter, int loopCount)
+    private DagNodeResult RunManagedNode(Node node, int iter)
     {
         try
         {
             switch (node.AlgoName)
             {
                 case "ForLoop":
+                {
+                    // count 优先取输入端口（数据驱动，如模板匹配输出的数量），
+                    // 未连接时退化为参数 count 的默认值。
+                    int cnt = -1;
+                    var inCnt = GetInputValue(node, "count");
+                    if (inCnt is int ic && ic > 0) cnt = ic;
+                    else if (inCnt is long lc && lc > 0) cnt = (int)lc;
+                    if (cnt <= 0 && node.Parameters.TryGetValue("count", out var cv) && cv is not null
+                        && int.TryParse(cv.ToString(), out var pc) && pc > 0) cnt = pc;
+                    if (cnt <= 0) cnt = 1;
                     node.OutputCache["index"] = iter;
-                    node.OutputCache["count"] = loopCount;
+                    node.OutputCache["count"] = cnt;
+                    if (cnt > _resolvedLoopCount) _resolvedLoopCount = cnt;
+                    Logger.Info("DagEngine", $"  ForLoop: index={iter}, count={cnt}");
                     break;
+                }
                 case "TcpServer":
                     EnsureServerListening(node);
                     // 输出端口 = 接收到的内容（最近一条完整消息）
@@ -219,6 +245,34 @@ public sealed class DagEngine
                     node.OutputCache["false"] = cond ? null : obj;
                     Logger.Info("DagEngine", $"  If 条件={cond} → 数据进入{(cond ? "true" : "false")} 分支");
                     break;
+                case "ConstString":
+                {
+                    var sv = node.Parameters.TryGetValue("value", out var svv) && svv is not null
+                        ? svv.ToString() ?? "" : "";
+                    node.OutputCache["value"] = sv;
+                    Logger.Info("DagEngine", $"  ConstString = '{sv}'");
+                    break;
+                }
+                case "ConstNumber":
+                {
+                    double dv = 0;
+                    if (node.Parameters.TryGetValue("value", out var nv) && nv is not null)
+                        double.TryParse(nv.ToString(), System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out dv);
+                    node.OutputCache["value"] = dv;
+                    Logger.Info("DagEngine", $"  ConstNumber = {dv}");
+                    break;
+                }
+                case "ConstInteger":
+                {
+                    int iv = 0;
+                    if (node.Parameters.TryGetValue("value", out var nv) && nv is not null)
+                        int.TryParse(nv.ToString(), System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out iv);
+                    node.OutputCache["value"] = iv;
+                    Logger.Info("DagEngine", $"  ConstInteger = {iv}");
+                    break;
+                }
                 case "PointSort":
                 {
                     // 点排序：先按 Y 分行，再按 X 升序。
@@ -347,6 +401,72 @@ public sealed class DagEngine
         return edge.From.Owner.OutputCache.TryGetValue(edge.From.Name, out var v) ? v : null;
     }
 
+    // 仅引擎消费、不下推给 native 的输入端口（用于数据驱动地构造 search_roi）。
+    private static readonly HashSet<string> EngineOnlyPorts =
+        new() { "roi_center", "roi_size", "roi_width", "roi_height", "roi_radius" };
+
+    private static bool IsEngineOnlyPort(string name) => EngineOnlyPorts.Contains(name);
+
+    private static bool TryGetPoint(object? v, out double x, out double y)
+    {
+        x = 0; y = 0;
+        switch (v)
+        {
+            case VzPoint2D p: x = p.x; y = p.y; return true;
+            case VzPose2D pose: x = pose.point.x; y = pose.point.y; return true;
+            case VzPoint2D[] arr when arr.Length > 0: x = arr[0].x; y = arr[0].y; return true;
+            default: return false;
+        }
+    }
+
+    private static bool TryGetDouble(object? v, out double d)
+    {
+        d = 0;
+        switch (v)
+        {
+            case double dd: d = dd; return true;
+            case float f: d = f; return true;
+            case int i: d = i; return true;
+            case long l: d = l; return true;
+            case string s when double.TryParse(s, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed): d = parsed; return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>
+    /// 数据驱动 ROI：若节点连了 roi_center（+ 尺寸）输入端口，则用它们构造 search_roi 参数，
+    /// 覆盖在图像上手绘的 ROI。仅对带 search_roi 参数的检测节点生效。
+    /// </summary>
+    private void InjectRoiFromInputs(Node node)
+    {
+        bool HasPort(string name) => node.Inputs.Any(p => p.Name == name);
+        if (!HasPort("roi_center")) return;
+        var cv = GetInputValue(node, "roi_center");
+        if (cv is null || !TryGetPoint(cv, out double cx, out double cy)) return;
+
+        if (HasPort("roi_width") && HasPort("roi_height"))
+        {
+            if (!TryGetDouble(GetInputValue(node, "roi_width"), out double w) || w <= 0) return;
+            if (!TryGetDouble(GetInputValue(node, "roi_height"), out double h) || h <= 0) return;
+            node.Parameters["search_roi"] = $"[{cx:F4},{cy:F4},{w:F4},{h:F4},0]";
+            Logger.Info("DagEngine", $"  ROI(输入) 矩形中心=({cx:F1},{cy:F1}) 尺寸={w:F1}x{h:F1}");
+        }
+        else if (HasPort("roi_size"))
+        {
+            if (!TryGetPoint(GetInputValue(node, "roi_size"), out double w, out double h)) return;
+            if (w <= 0 || h <= 0) return;
+            node.Parameters["search_roi"] = $"[{cx:F4},{cy:F4},{w:F4},{h:F4},0]";
+            Logger.Info("DagEngine", $"  ROI(输入) 矩形中心=({cx:F1},{cy:F1}) 尺寸={w:F1}x{h:F1}");
+        }
+        else if (HasPort("roi_radius"))
+        {
+            if (!TryGetDouble(GetInputValue(node, "roi_radius"), out double r) || r <= 0) return;
+            node.Parameters["search_roi"] = $"[{cx:F4},{cy:F4},{r:F4}]";
+            Logger.Info("DagEngine", $"  ROI(输入) 圆形中心=({cx:F1},{cy:F1}) r={r:F1}");
+        }
+    }
+
     /// <summary>计算 If 节点的条件是否成立。</summary>
     private static bool EvalIfCondition(Node node, object? obj)
     {
@@ -452,9 +572,10 @@ public sealed class DagEngine
                 blocked.Add(n);
                 continue;
             }
-            if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort")
+            if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
+                or "ConstString" or "ConstNumber" or "ConstInteger")
             {
-                results.Add(RunManagedNode(n, 0, 1));
+                results.Add(RunManagedNode(n, 0));
                 continue;
             }
             var r = RunNode(n);
@@ -505,6 +626,9 @@ public sealed class DagEngine
 
             using var interop = new VzAlgoInterop(node.AlgoName);
 
+            // --- 0) 数据驱动 ROI：用输入端口覆盖 search_roi 参数 ---
+            InjectRoiFromInputs(node);
+
             // --- 1) 推入参数 ---
             if (node.Parameters.Count > 0)
                 Logger.Info("DagEngine", $"  推入 {node.Parameters.Count} 个参数：[{string.Join(", ", node.Parameters.Where(kv => kv.Value is not null).Select(kv => $"{kv.Key}={kv.Value}"))}]");
@@ -519,6 +643,10 @@ public sealed class DagEngine
             // --- 2) 推入输入端口 ---
             foreach (var port in node.Inputs)
             {
+                // 引擎专用端口（roi_center/roi_size/roi_width/roi_height/roi_radius）
+                // 只用于构造 search_roi，不下推给 native（否则 native 报 unknown input）。
+                if (IsEngineOnlyPort(port.Name)) continue;
+
                 // 查找连到这个输入端口的边
                 var edge = _graph.EdgesInto(node)
                     .FirstOrDefault(e => e.To.Name == port.Name);

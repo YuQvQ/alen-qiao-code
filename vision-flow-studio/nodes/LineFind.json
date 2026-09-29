@@ -5,7 +5,10 @@
   "icon": "icons/line_find.svg",
   "algo_binding": { "dll": "vision_algo", "algo_name": "LineFind" },
   "inputs": [
-    { "name": "image", "type": "Image", "required": true, "description": "输入图像" }
+    { "name": "image", "type": "Image", "required": true, "description": "输入图像" },
+    { "name": "roi_center", "type": "Pose2D", "required": false, "description": "搜索区中心(由上游传入，连了就覆盖手绘ROI)" },
+    { "name": "roi_width", "type": "Double", "required": false, "description": "搜索区宽(像素)" },
+    { "name": "roi_height", "type": "Double", "required": false, "description": "搜索区高(像素)" }
   ],
   "outputs": [
     { "name": "result_image", "type": "Image", "required": true, "description": "叠加检测直线的结果图" },
