@@ -73,15 +73,30 @@ public partial class ImageWindow : UserControl
         Brushes.Orange, Brushes.DeepPink, Brushes.DodgerBlue,
     };
 
+    // 尺寸变化防抖：最大化/拖拽缩放窗口时，SizeChanged 会连续触发几十次，
+    // 每次都 FitToWindow + 重建全部覆盖层(成百上千形状)会导致长时间卡死。
+    // 用一个短定时器合并：稳定 120ms 后只执行一次适应 + 覆盖层重建。
+    private readonly System.Windows.Threading.DispatcherTimer _resizeTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(120) };
+
     public ImageWindow()
     {
         InitializeComponent();
-        ImageView.SizeChanged += OnImageViewSizeChanged;
-        // ImageArea 尺寸变化时重新适应（解决首次加载时 ActualWidth=0 的问题）
-        ImageArea.SizeChanged += (s, e) => {
+        _resizeTimer.Tick += (s, e) =>
+        {
+            _resizeTimer.Stop();
+            // 仅在视口(窗口)尺寸变化后重新适应；绝不在此响应 ImageView 自身尺寸变化，
+            // 否则会把用户滚轮缩放强行重置回“适应窗口”。
             if (_imgPixelW > 0 && _imgPixelH > 0)
+            {
                 FitToWindow();
+                RenderRoiOverlays();
+            }
         };
+        // ImageView 尺寸变化（由缩放引起）：只同步覆盖层，不重新适应窗口。
+        ImageView.SizeChanged += OnImageViewSizeChanged;
+        // ImageArea(视口) 尺寸变化时防抖后重新适应（解决首次加载 ActualWidth=0 + 最大化卡顿）
+        ImageArea.SizeChanged += (s, e) => _resizeTimer.Start();
         RoiCanvas.MouseLeftButtonDown += OnRoiCanvasMouseDown;
         RoiCanvas.MouseMove += OnRoiCanvasMouseMove;
         RoiCanvas.MouseLeftButtonUp += OnRoiCanvasMouseUp;
@@ -116,6 +131,27 @@ public partial class ImageWindow : UserControl
         TemplateToolbarHost.Visibility = isTemplate ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    // 显示位图最大边长。超过则生成降采样副本作为显示源，大幅降低渲染开销
+    // （5120² 大图在软件渲染路径下重排会卡顿很久）。_bmp 始终保留全分辨率供取色。
+    private const int MaxDisplayDim = 4096;
+    private void SetDisplaySource(BitmapSource src)
+    {
+        ImageView.Source = src;
+        int max = Math.Max(src.PixelWidth, src.PixelHeight);
+        if (max <= MaxDisplayDim) return;
+        try
+        {
+            // 用独立副本生成降采样显示图：Freeze 会递归冻结 Source，
+            // 绝不能冻结到 _bmp（否则取色 Lock/Unlock 会抛异常闪退）。
+            double s = MaxDisplayDim / (double)max;
+            var copy = (BitmapSource)src.Clone();
+            var tb = new TransformedBitmap(copy, new ScaleTransform(s, s));
+            tb.Freeze();
+            ImageView.Source = tb;
+        }
+        catch { /* 降级：保持原图显示 */ }
+    }
+
     // ============================================================
     // 显示图像
     // ============================================================
@@ -130,7 +166,7 @@ public partial class ImageWindow : UserControl
         var bmp = VzImageConverter.ToBitmapSource(ref img);
         _bmp = bmp as WriteableBitmap;
         _currentMatches = null;
-        ImageView.Source = bmp;
+        SetDisplaySource(bmp);
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} 来自 {sourceLabel}";
@@ -162,7 +198,7 @@ public partial class ImageWindow : UserControl
         _bmp = baseBmp as WriteableBitmap;
         _currentMatches = null;
         _overlayNode = node;
-        ImageView.Source = baseBmp;
+        SetDisplaySource(baseBmp);
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} 来自 {sourceLabel} (矢量覆盖)";
@@ -195,7 +231,7 @@ public partial class ImageWindow : UserControl
         _currentMatches = matches;
         if (matches is { Length: > 0 })
             DrawRectsOnBitmap(bmp, matches);
-        ImageView.Source = bmp;
+        SetDisplaySource(bmp);
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} + {matches?.Length ?? 0} 匹配 来自 {sourceLabel}";
@@ -223,7 +259,7 @@ public partial class ImageWindow : UserControl
                 matches[i] = new VzMatchResult { rect = rects[i], score = 0, template_id = 0 };
             DrawRectsOnBitmap(bmp, matches, rectColor: 0x00FFFF, crossColor: 0x00FFFF00);
         }
-        ImageView.Source = bmp;
+        SetDisplaySource(bmp);
         _imgPixelW = img.width;
         _imgPixelH = img.height;
         ImageInfoText.Text = $"{img.width}×{img.height}×{img.channels} + {rects?.Length ?? 0} 区域 来自 {sourceLabel}";
@@ -411,8 +447,9 @@ public partial class ImageWindow : UserControl
     /// <summary>根据鼠标在视口中的位置，计算对应图像像素坐标和灰度值。</summary>
     private unsafe void UpdatePixelInfo(Point screenPos)
     {
-        if (_bmp is null || _imgPixelW <= 0 || _imgPixelH <= 0)
+        if (_bmp is null || _bmp.IsFrozen || _imgPixelW <= 0 || _imgPixelH <= 0)
         {
+            // _bmp 被冻结时无法 Lock/Unlock 取色，直接返回避免异常闪退
             PixelInfoText.Text = "X=—, Y=—, Gray=—";
             return;
         }
