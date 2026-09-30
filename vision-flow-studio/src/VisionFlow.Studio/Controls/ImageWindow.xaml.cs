@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,6 +14,17 @@ using VisionFlow.Studio;  // OverlayRenderer
 
 namespace VisionFlow.Studio.Controls;
 
+/// <summary>图像源下拉选项：一个可选的图像（原图输入 / 运行结果等）。</summary>
+public sealed class ImageSourceChoice
+{
+    public string Key { get; }
+    public string Label { get; }
+    public VzImage Image { get; }
+    public ImageSourceChoice(string key, string label, VzImage image)
+    { Key = key; Label = label; Image = image; }
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// 图像查看窗口：支持平移（鼠标拖拽）、缩放（滚轮）、
 /// 右下角显示鼠标位置坐标+灰度值。
@@ -24,6 +37,34 @@ public partial class ImageWindow : UserControl
     // === 当前节点 & 图像尺寸 ===
     private Node? _activeNode;
     private double _imgPixelW, _imgPixelH;
+
+    // === 图像源下拉 ===
+    public event Action<ImageSourceChoice?>? ImageSourceChanged;
+    private bool _suppressSourceChange;
+
+    /// <summary>用当前节点可用的图像填充下拉框，并预选 preferKey 对应项。</summary>
+    public void SetImageSourceChoices(IReadOnlyList<ImageSourceChoice> choices, string? preferKey)
+    {
+        _suppressSourceChange = true;
+        ImageSourceCombo.ItemsSource = choices;
+        if (choices.Count == 0)
+        {
+            ImageSourceCombo.IsEnabled = false;
+            ImageSourceCombo.SelectedItem = null;
+            _suppressSourceChange = false;
+            return;
+        }
+        ImageSourceCombo.IsEnabled = true;
+        var sel = choices.FirstOrDefault(c => c.Key == preferKey) ?? choices[0];
+        ImageSourceCombo.SelectedItem = sel;
+        _suppressSourceChange = false;
+    }
+
+    private void ImageSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressSourceChange) return;
+        ImageSourceChanged?.Invoke(ImageSourceCombo.SelectedItem as ImageSourceChoice);
+    }
 
     // 当前缩放比例：1.0 = 1:1 原始像素，>1 放大，<1 缩小
     private double _scale = 1.0;

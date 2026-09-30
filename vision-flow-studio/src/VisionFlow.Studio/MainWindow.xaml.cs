@@ -212,6 +212,7 @@ public partial class MainWindow : Window
         // 3) 画布绑定 Graph + 订阅画布上报事件
         CanvasHost.Graph = _graph;
         CanvasHost.SelectedNodeChanged += OnSelectedNodeChanged;
+        ImageHost.ImageSourceChanged += OnImageSourceChanged;
         CanvasHost.StatusText += msg => StatusText.Text = msg;
         CanvasHost.NodeDropped += OnNodeDropped;
         CanvasHost.NodeDoubleClicked += OnNodeDoubleClicked;
@@ -346,8 +347,9 @@ public partial class MainWindow : Window
     {
         if (node is null)
         {
-            // 取消选中：清除图像窗口的 ROI 覆盖层
+            // 取消选中：清除图像窗口的 ROI 覆盖层 + 清空图像源下拉
             ImageHost.ActiveNode = null;
+            ImageHost.SetImageSourceChoices(new List<ImageSourceChoice>(), null);
             return;
         }
         // 选中节点：把输出图像绘制到图像窗口
@@ -618,144 +620,124 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 如果节点 OutputCache 里有 image 输出端口，把第一张图绘制到 ImageHost。
-    /// 用于：选中节点时自动预览；运行完成后立即绘制。
+    /// 收集当前节点所有可用图像：图像输入(原图/上游) + 图像输出(运行结果)，
+    /// 供图像窗口下拉框切换显示。
+    /// </summary>
+    private List<ImageSourceChoice> CollectImageChoices(Node node)
+    {
+        var list = new List<ImageSourceChoice>();
+
+        // 1) 图像输入（原图/上游图）
+        foreach (var p in node.Inputs.Where(p => p.Type.Name == "Image"))
+        {
+            var edge = _graph.EdgesInto(node).FirstOrDefault(e => e.To.Name == p.Name);
+            if (edge is null) continue;
+            var upstream = edge.From.Owner;
+            if (upstream.OutputCache.TryGetValue(edge.From.Name, out var v)
+                && v is VzImage im && im.data != IntPtr.Zero)
+                list.Add(new ImageSourceChoice($"input:{p.Name}",
+                    $"原图 · {upstream.DisplayName}.{edge.From.Name}", im));
+        }
+
+        // 2) 图像输出（运行结果 / 中间图）
+        foreach (var p in node.Outputs.Where(p => p.Type.Name == "Image"))
+        {
+            if (node.OutputCache.TryGetValue(p.Name, out var v)
+                && v is VzImage im && im.data != IntPtr.Zero)
+            {
+                string tag = p.Name == "result_image" ? "运行结果" : "输出";
+                list.Add(new ImageSourceChoice($"output:{p.Name}", $"{tag} · {p.Name}", im));
+            }
+        }
+
+        // 3) 纯数据节点（PointSort/IndexSelector）：补一张“产生空间数据的上游节点”的图
+        if (list.Count == 0 && node.TypeId is "PointSort" or "IndexSelector")
+        {
+            var prodImg = TryImageFromSpatialProducer(node, out var label);
+            if (prodImg is VzImage pim)
+                list.Add(new ImageSourceChoice("spatial", $"原图 · {label ?? "上游"}", pim));
+        }
+
+        return list;
+    }
+
+    /// <summary>把一张图 + 当前节点的结果覆盖（匹配/矩形/通用覆盖）显示到图像窗口。</summary>
+    private void DisplayWithOverlays(ref VzImage img, Node node, string sourceLabel)
+    {
+        var matchesPort = node.Outputs.FirstOrDefault(p => p.Type.Name == "MatchResultList");
+        var rectsPort = node.Outputs.FirstOrDefault(p => p.Type.Name == "RectList");
+        if (matchesPort is not null
+            && node.OutputCache.TryGetValue(matchesPort.Name, out var mv)
+            && mv is VzMatchResult[] m && m.Length > 0)
+        {
+            ImageHost.ShowImageWithMatches(ref img, m, sourceLabel: sourceLabel);
+            return;
+        }
+        if (rectsPort is not null
+            && node.OutputCache.TryGetValue(rectsPort.Name, out var rv)
+            && rv is VzRect[] r && r.Length > 0)
+        {
+            ImageHost.ShowImageWithRects(ref img, r, sourceLabel: sourceLabel);
+            return;
+        }
+        ImageHost.ShowImageWithOverlay(ref img, node, sourceLabel: sourceLabel);
+    }
+
+    /// <summary>
+    /// 选中节点时：收集其可用图像填充下拉框，并默认显示一张（优先运行结果，其次原图）。
+    /// 下拉切换时由 OnImageSourceChanged 驱动显示。
     /// </summary>
     private void TryShowImageOutputToHost(Node? node)
     {
-        // 纯数据节点（如 PointSort）自身无图：从“产生空间数据的上游节点”反查其所用图像，
-        // 保证叠加层坐标与点/矩形在同一坐标空间。
-        VzImage? TryImageFromSpatialProducer(Node n, out string? label)
-        {
-            label = null;
-            foreach (var portName in new[] { "points", "centers", "point", "corners" })
-            {
-                var e = _graph.EdgesInto(n).FirstOrDefault(x => x.To.Name == portName);
-                if (e is null) continue;
-                var img = GetBestImageOf(e.From.Owner, out label);
-                if (img is not null) return img;
-            }
-            return null;
-        }
-
         if (node is null)
         {
             ImageHost.ActiveNode = null;
+            ImageHost.SetImageSourceChoices(new List<ImageSourceChoice>(), null);
             return;
         }
 
         // 把当前节点关联到图像窗口，使 ROI 参数可被渲染为可拖拽覆盖层
         ImageHost.ActiveNode = node;
 
-        // 端口查找
-        var matchesPort = node.Outputs.FirstOrDefault(p => p.Type.Name == "MatchResultList");
-        var rectsPort = node.Outputs.FirstOrDefault(p => p.Type.Name == "RectList");
-        var imgPort = node.Outputs.FirstOrDefault(p => p.Type.Name == "Image");
+        var choices = CollectImageChoices(node);
+        // 默认优先级：运行结果(result_image) > 任意输出 > 原图输入
+        string? prefer = choices.FirstOrDefault(c => c.Key == "output:result_image")?.Key
+                      ?? choices.FirstOrDefault(c => c.Key.StartsWith("output:"))?.Key
+                      ?? (choices.Count > 0 ? choices[0].Key : null);
+        ImageHost.SetImageSourceChoices(choices, prefer);
 
-        // 优先显示节点自身的 result_image（现已是原图透传，无标注），
-        // 再由 UI 层 OverlayRenderer 依据节点输出数据绘制覆盖标注。
-        var resultImgPort = node.Outputs.FirstOrDefault(p => p.Name == "result_image");
-        if (resultImgPort is not null
-            && node.OutputCache.TryGetValue(resultImgPort.Name, out var riVal)
-            && riVal is VzImage rImg && rImg.data != IntPtr.Zero)
+        var sel = choices.FirstOrDefault(c => c.Key == prefer)
+               ?? (choices.Count > 0 ? choices[0] : null);
+        if (sel is not null)
         {
-            // 有匹配/矩形结果时，优先把标注画到图上（OverlayRenderer 不处理 TemplateMatch 等）
-            if (matchesPort is not null
-                && node.OutputCache.TryGetValue(matchesPort.Name, out var rmVal)
-                && rmVal is VzMatchResult[] rmatches && rmatches.Length > 0)
-            {
-                ImageHost.ShowImageWithMatches(ref rImg, rmatches,
-                    sourceLabel: $"{node.DisplayName}.result_image");
-                return;
-            }
-            if (rectsPort is not null
-                && node.OutputCache.TryGetValue(rectsPort.Name, out var rrVal)
-                && rrVal is VzRect[] rrects && rrects.Length > 0)
-            {
-                ImageHost.ShowImageWithRects(ref rImg, rrects,
-                    sourceLabel: $"{node.DisplayName}.result_image");
-                return;
-            }
-            ImageHost.ShowImageWithOverlay(ref rImg, node,
-                sourceLabel: $"{node.DisplayName}.result_image");
-            return;
+            var img = sel.Image;
+            DisplayWithOverlays(ref img, node, sel.Label);
         }
+    }
 
-        // 纯数据节点（PointSort / IndexSelector）：优先用“产生点的上游节点”的图像叠加，
-        // 确保编号/十字与点在同一坐标空间（即便本节点另接了 image 也以此为准）。
-        if (node.TypeId is "PointSort" or "IndexSelector")
+    /// <summary>下拉框切换图像源：按所选图像重新显示（叠加当前节点结果）。</summary>
+    private void OnImageSourceChanged(ImageSourceChoice? choice)
+    {
+        if (choice is null) return;
+        var node = CanvasHost.SelectedNode;
+        if (node is null) return;
+        var img = choice.Image;
+        DisplayWithOverlays(ref img, node, choice.Label);
+    }
+
+    // 纯数据节点（如 PointSort）自身无图：从“产生空间数据的上游节点”反查其所用图像，
+    // 保证叠加层坐标与点/矩形在同一坐标空间。
+    private VzImage? TryImageFromSpatialProducer(Node n, out string? label)
+    {
+        label = null;
+        foreach (var portName in new[] { "points", "centers", "point", "corners" })
         {
-            var prodImg = TryImageFromSpatialProducer(node, out var prodLabel);
-            if (prodImg is VzImage pimg)
-            {
-                ImageHost.ShowImageWithOverlay(ref pimg, node, sourceLabel: prodLabel ?? "");
-                return;
-            }
+            var e = _graph.EdgesInto(n).FirstOrDefault(x => x.To.Name == portName);
+            if (e is null) continue;
+            var img = GetBestImageOf(e.From.Owner, out label);
+            if (img is not null) return img;
         }
-
-        // 取上游 image（不管本节点有没有 image 输出，都尝试找上游原图）
-        VzImage? upImg = null;
-        string? upLabel = null;
-        var imageInputPort = node.FindInput("image");
-        if (imageInputPort is not null)
-        {
-            var edge = _graph.EdgesInto(node).FirstOrDefault(e => e.To.Name == "image");
-            if (edge is not null)
-            {
-                var upstream = edge.From.Owner;
-                if (upstream.OutputCache.TryGetValue(edge.From.Name, out var upVal)
-                    && upVal is VzImage ui && ui.data != IntPtr.Zero)
-                {
-                    upImg = ui;
-                    upLabel = $"{upstream.DisplayName}.{edge.From.Name}";
-                }
-            }
-        }
-
-        // 优先用上游图像 + 叠加结果（更符合"在原图上看结果"的需求）
-        if (upImg is VzImage uimg)
-        {
-            // 模板匹配结果叠加到上游原图
-            if (matchesPort is not null
-                && node.OutputCache.TryGetValue(matchesPort.Name, out var mVal)
-                && mVal is VzMatchResult[] matches && matches.Length > 0)
-            {
-                ImageHost.ShowImageWithMatches(ref uimg, matches,
-                    sourceLabel: $"{node.DisplayName}.{matchesPort.Name} (image from {upLabel})");
-                return;
-            }
-            // RectList 结果叠加到上游原图
-            if (rectsPort is not null
-                && node.OutputCache.TryGetValue(rectsPort.Name, out var rVal)
-                && rVal is VzRect[] rects && rects.Length > 0)
-            {
-                ImageHost.ShowImageWithRects(ref uimg, rects,
-                    sourceLabel: $"{node.DisplayName}.{rectsPort.Name} (image from {upLabel})");
-                return;
-            }
-            // 有上游图：在上游原图上由 UI 层绘制节点覆盖标注
-            ImageHost.ShowImageWithOverlay(ref uimg, node, sourceLabel: upLabel ?? "");
-            return;
-        }
-
-        // 没有上游图时，回退到节点自身的 image 输出
-        if (imgPort is not null
-            && node.OutputCache.TryGetValue(imgPort.Name, out var val)
-            && val is VzImage img && img.data != IntPtr.Zero)
-        {
-            VzMatchResult[]? matches = null;
-            if (matchesPort is not null
-                && node.OutputCache.TryGetValue(matchesPort.Name, out var mVal)
-                && mVal is VzMatchResult[] arr)
-                matches = arr;
-
-            if (matches is { Length: > 0 })
-                ImageHost.ShowImageWithMatches(ref img, matches,
-                    sourceLabel: $"{node.DisplayName}.{imgPort.Name}");
-            else
-                ImageHost.ShowImageWithOverlay(ref img, node,
-                    sourceLabel: $"{node.DisplayName}.{imgPort.Name}");
-        }
+        return null;
     }
 
     // ============================================================

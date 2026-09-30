@@ -7,8 +7,16 @@
         <Border DockPanel.Dock="Top" Background="{StaticResource SurfaceMutedBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,4">
             <DockPanel>
-                <TextBlock Text="图像查看" FontWeight="SemiBold" FontSize="12"
-                           VerticalAlignment="Center" />
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="图像查看" FontWeight="SemiBold" FontSize="12"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="图像源：" FontSize="11" VerticalAlignment="Center"
+                               Margin="14,0,4,0"
+                               Foreground="{StaticResource TextMutedBrush}" />
+                    <ComboBox x:Name="ImageSourceCombo" Width="240" Height="22" FontSize="11"
+                              VerticalAlignment="Center"
+                              SelectionChanged="ImageSourceCombo_SelectionChanged" />
+                </StackPanel>
                 <!-- 右侧按钮组 -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right">
