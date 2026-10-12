@@ -231,7 +231,8 @@ public partial class MainWindow : Window
         // 这样循环里矩形检测等节点的检测位置会逐个显示，而不是只看到最后一帧。
         _engine.OnAfterIteration = () =>
         {
-            try { Dispatcher.Invoke(new Action(ShowRunResultImage), System.Windows.Threading.DispatcherPriority.Background); }
+            // 非阻塞投递：不让运行线程等 UI 渲染，保证循环流畅；UI 按 Background 优先级逐帧刷新。
+            try { Dispatcher.BeginInvoke(new Action(ShowRunResultImage), System.Windows.Threading.DispatcherPriority.Background); }
             catch { /* 关闭/取消时忽略 */ }
         };
         Logger.Info("DagEngine", "DAG 引擎就绪");
@@ -683,35 +684,74 @@ public partial class MainWindow : Window
         ImageHost.ShowImageWithOverlay(ref img, node, sourceLabel: sourceLabel);
     }
 
+    // 记录上次显示的节点与图像 key，使“迭代实时刷新”时不必重建下拉框，
+    // 只需按 key 重新取图（也避免跨迭代持有已失效的原生图像指针）。
+    private Node? _lastImageNode;
+    private string? _lastImageKey;
+
+    /// <summary>按 key 从节点当前缓存里重新解析一张图（output/input/spatial）。</summary>
+    private VzImage? ResolveImageByKey(Node node, string key)
+    {
+        if (key.StartsWith("output:"))
+        {
+            var name = key.Substring("output:".Length);
+            if (node.OutputCache.TryGetValue(name, out var v) && v is VzImage im && im.data != IntPtr.Zero)
+                return im;
+        }
+        else if (key.StartsWith("input:"))
+        {
+            var name = key.Substring("input:".Length);
+            var edge = _graph.EdgesInto(node).FirstOrDefault(e => e.To.Name == name);
+            if (edge is not null
+                && edge.From.Owner.OutputCache.TryGetValue(edge.From.Name, out var v)
+                && v is VzImage im && im.data != IntPtr.Zero)
+                return im;
+        }
+        else if (key == "spatial")
+        {
+            return TryImageFromSpatialProducer(node, out _);
+        }
+        return null;
+    }
+
     /// <summary>
-    /// 选中节点时：收集其可用图像填充下拉框，并默认显示一张（优先运行结果，其次原图）。
-    /// 下拉切换时由 OnImageSourceChanged 驱动显示。
+    /// 显示节点图像。rebuildChoices=true（选中节点时）重建图像源下拉框；
+    /// rebuildChoices=false（运行中每轮刷新）走快路径，仅按上次 key 重取重绘。
     /// </summary>
-    private void TryShowImageOutputToHost(Node? node)
+    private void TryShowImageOutputToHost(Node? node, bool rebuildChoices = true)
     {
         if (node is null)
         {
             ImageHost.ActiveNode = null;
             ImageHost.SetImageSourceChoices(new List<ImageSourceChoice>(), null);
+            _lastImageNode = null; _lastImageKey = null;
             return;
         }
 
-        // 把当前节点关联到图像窗口，使 ROI 参数可被渲染为可拖拽覆盖层
         ImageHost.ActiveNode = node;
 
-        var choices = CollectImageChoices(node);
-        // 默认优先级：运行结果(result_image) > 任意输出 > 原图输入
-        string? prefer = choices.FirstOrDefault(c => c.Key == "output:result_image")?.Key
-                      ?? choices.FirstOrDefault(c => c.Key.StartsWith("output:"))?.Key
-                      ?? (choices.Count > 0 ? choices[0].Key : null);
-        ImageHost.SetImageSourceChoices(choices, prefer);
-
-        var sel = choices.FirstOrDefault(c => c.Key == prefer)
-               ?? (choices.Count > 0 ? choices[0] : null);
-        if (sel is not null)
+        string? key;
+        if (rebuildChoices || _lastImageNode != node)
         {
-            var img = sel.Image;
-            DisplayWithOverlays(ref img, node, sel.Label);
+            var choices = CollectImageChoices(node);
+            string? prefer = choices.FirstOrDefault(c => c.Key == "output:result_image")?.Key
+                          ?? choices.FirstOrDefault(c => c.Key.StartsWith("output:"))?.Key
+                          ?? (choices.Count > 0 ? choices[0].Key : null);
+            ImageHost.SetImageSourceChoices(choices, prefer);
+            key = prefer;
+            _lastImageNode = node;
+            _lastImageKey = key;
+        }
+        else
+        {
+            key = _lastImageKey; // 保持用户在下拉框里的选择
+        }
+
+        if (key is not null)
+        {
+            var img = ResolveImageByKey(node, key);
+            if (img is VzImage im)
+                DisplayWithOverlays(ref im, node, key);
         }
     }
 
@@ -721,8 +761,11 @@ public partial class MainWindow : Window
         if (choice is null) return;
         var node = CanvasHost.SelectedNode;
         if (node is null) return;
-        var img = choice.Image;
-        DisplayWithOverlays(ref img, node, choice.Label);
+        _lastImageNode = node;
+        _lastImageKey = choice.Key;
+        var im = ResolveImageByKey(node, choice.Key);
+        if (im is VzImage img)
+            DisplayWithOverlays(ref img, node, choice.Label);
     }
 
     // 纯数据节点（如 PointSort）自身无图：从“产生空间数据的上游节点”反查其所用图像，
@@ -1166,15 +1209,16 @@ public partial class MainWindow : Window
         return iv;
     }
 
-    /// <summary>把选中节点（或最后一个有图像输出的节点）的结果显示到图像窗口。</summary>
+    /// <summary>把选中节点（或最后一个有图像输出的节点）的结果显示到图像窗口。
+    /// 运行中每轮调用：走快路径，不重建图像源下拉框。</summary>
     private void ShowRunResultImage()
     {
-        if (CanvasHost.SelectedNode is Node sel) TryShowImageOutputToHost(sel);
+        if (CanvasHost.SelectedNode is Node sel) TryShowImageOutputToHost(sel, rebuildChoices: false);
         else
         {
             var imgNode = _graph.Nodes.LastOrDefault(n =>
                 n.OutputCache.Values.OfType<VzImage>().Any(v => v.data != IntPtr.Zero));
-            if (imgNode is not null) TryShowImageOutputToHost(imgNode);
+            if (imgNode is not null) TryShowImageOutputToHost(imgNode, rebuildChoices: false);
         }
     }
 

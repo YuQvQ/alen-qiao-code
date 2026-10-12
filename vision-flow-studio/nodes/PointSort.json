@@ -12,6 +12,8 @@
     { "name": "count", "type": "Int", "required": true, "description": "点的数量" }
   ],
   "parameters": [
-    { "name": "row_tolerance", "type": "Double", "default": 20.0, "description": "Y方向分行容差(像素)。>0 时把Y相近的点视为同一行再按X排；<=0 时严格先Y后X" }
+    { "name": "sort_mode", "type": "Int", "default": 0, "description": "排序方式",
+      "enum": [[0, "行扫描"], [1, "Z字形"], [2, "S字形"], [3, "米字形"], [4, "回字形"]] },
+    { "name": "row_tolerance", "type": "Double", "default": 20.0, "description": "分行/分列容差(像素)。>0 时把坐标相近的点视为同一行/列；<=0 时自动估计" }
   ]
 }

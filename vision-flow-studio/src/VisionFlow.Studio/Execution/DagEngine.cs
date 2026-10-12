@@ -135,7 +135,8 @@ public sealed class DagEngine
 
                 // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端 / PointSort
                 if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
-                    or "ConstString" or "ConstNumber" or "ConstInteger")
+                    or "ConstString" or "ConstNumber" or "ConstInteger"
+                    or "TypeConvert" or "SaveData")
                 {
                     results.Add(RunManagedNode(node, iter));
                     continue;
@@ -282,55 +283,54 @@ public sealed class DagEngine
                     var pts = (raw as VzPoint2D[] ?? Array.Empty<VzPoint2D>()).ToList();
                     node.InputCache["points"] = pts.ToArray();
                     double tol = PDouble(node, "row_tolerance", 20.0);
+                    int mode = PInt(node, "sort_mode", 0);
 
-                    VzPoint2D[] sorted;
-                    if (pts.Count == 0)
-                    {
-                        sorted = Array.Empty<VzPoint2D>();
-                    }
-                    else if (tol <= 0)
-                    {
-                        sorted = pts.OrderBy(p => p.y).ThenBy(p => p.x).ToArray();
-                    }
-                    else
-                    {
-                        var byY = pts.OrderBy(p => p.y).ToList();
-                        // 自动估计典型行距：相邻点 Y 差中大于 minGap 的那些差值取中位数。
-                        // 同行内相邻点的 Y 抖动通常 < minGap 被过滤，剩下的多为换行差，中位数即行距。
-                        double minGap = tol;
-                        var gaps = new List<double>();
-                        for (int i = 1; i < byY.Count; i++)
-                        {
-                            double d = byY[i].y - byY[i - 1].y;
-                            if (d > minGap) gaps.Add(d);
-                        }
-                        double rowGap = gaps.Count > 0
-                            ? gaps.OrderBy(x => x).ElementAt(gaps.Count / 2)
-                            : minGap * 2.0;
-                        double threshold = rowGap * 0.5;
-
-                        // 分行：按 Y 排序后，当前点与当前行最大 Y 的差 > threshold 则另起一行。
-                        // 用 maxY（而非平均Y）更稳定，避免透视下某点拉偏均值。
-                        var rows = new List<List<VzPoint2D>>();
-                        double rowMaxY = double.NegativeInfinity;
-                        foreach (var p in byY)
-                        {
-                            if (rows.Count == 0 || p.y - rowMaxY > threshold)
-                            {
-                                rows.Add(new List<VzPoint2D> { p });
-                                rowMaxY = p.y;
-                            }
-                            else
-                            {
-                                rows[rows.Count - 1].Add(p);
-                                if (p.y > rowMaxY) rowMaxY = p.y;
-                            }
-                        }
-                        sorted = rows.SelectMany(r => r.OrderBy(p => p.x)).ToArray();
-                    }
+                    var sorted = SortPoints(pts.ToArray(), tol, mode);
                     node.OutputCache["points"] = sorted;
                     node.OutputCache["count"] = sorted.Length;
-                    Logger.Info("DagEngine", $"  PointSort: {pts.Count} 点 → 排序后 {sorted.Length} (row_tolerance={tol})");
+                    Logger.Info("DagEngine", $"  PointSort: {pts.Count} 点 → 排序后 {sorted.Length} (mode={mode}, row_tolerance={tol})");
+                    break;
+                }
+                case "TypeConvert":
+                {
+                    // 任意类型 → 字符串。数值可用 format 参数控制格式（如 "F2"）。
+                    var raw = GetInputValue(node, "value");
+                    var fmt = P(node, "format", "");
+                    var sv = FormatValue(raw, fmt);
+                    node.OutputCache["value"] = sv;
+                    Logger.Info("DagEngine", $"  TypeConvert → '{sv}'");
+                    break;
+                }
+                case "SaveData":
+                {
+                    // 保存数据到文件：path 优先取输入端口，未连接则用参数 path。
+                    var path = GetInputString(node, "path");
+                    if (string.IsNullOrWhiteSpace(path))
+                        path = P(node, "path", "output.txt");
+                    int append = PInt(node, "append", 1);
+                    var val = GetInputValue(node, "value");
+                    string text = FormatValue(val, "");
+                    int ok = 0;
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(path))
+                        {
+                            var full = System.IO.Path.GetFullPath(path);
+                            var dir = System.IO.Path.GetDirectoryName(full);
+                            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                                System.IO.Directory.CreateDirectory(dir);
+                            if (append == 1) System.IO.File.AppendAllText(full, text + Environment.NewLine);
+                            else System.IO.File.WriteAllText(full, text);
+                            ok = 1;
+                        }
+                        Logger.Info("DagEngine", $"  SaveData → '{path}' (append={append}) len={text.Length} ok={ok}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn("DagEngine", $"SaveData 写入失败: {ex.Message}");
+                        ok = 0;
+                    }
+                    node.OutputCache["ok"] = ok;
                     break;
                 }
             }
@@ -367,6 +367,113 @@ public sealed class DagEngine
                     System.Globalization.CultureInfo.InvariantCulture, out var p)) return p;
         }
         return fallback;
+    }
+
+    // ============================================================
+    // 点排序（PointSort）：支持多种排序方式
+    //   mode 0 行扫描：按行从上到下，每行左→右（默认/原行为）
+    //   mode 1 Z字形：按行，每行方向交替（蛇形，横向）
+    //   mode 2 S字形：按列，每列方向交替（蛇形，纵向）
+    //   mode 3 米字形：绕质心按极角排序（顺时针扫描）
+    //   mode 4 回字形：绕质心按半径由内向外（螺旋）
+    // ============================================================
+    private static VzPoint2D[] SortPoints(VzPoint2D[] pts, double tol, int mode)
+    {
+        if (pts.Length <= 1) return pts.ToArray();
+        return mode switch
+        {
+            1 => SortSerpentine(pts, tol, horizontal: true),
+            2 => SortSerpentine(pts, tol, horizontal: false),
+            3 => SortAngular(pts),
+            4 => SortRadius(pts),
+            _ => SortRowScan(pts, tol),
+        };
+    }
+
+    /// <summary>沿某轴聚类成行/列：byX=true 按 X 聚类成列，false 按 Y 聚类成行。</summary>
+    private static List<List<VzPoint2D>> ClusterLines(VzPoint2D[] pts, double tol, bool byX)
+    {
+        double Coord(VzPoint2D p) => byX ? p.x : p.y;
+        var ordered = pts.OrderBy(Coord).ToList();
+        double mn = ordered[0].x, mx = ordered[0].x;
+        foreach (var p in ordered) { if (p.x < mn) mn = p.x; if (p.x > mx) mx = p.x; }
+        double span = (mx - mn) / Math.Max(1, pts.Length);
+        double t = tol > 0 ? tol : Math.Max(1.0, span * 2);
+
+        // 估计“换行/换列”的典型间距：大于 t 的相邻间距取中位数
+        var gaps = new List<double>();
+        for (int i = 1; i < ordered.Count; i++)
+        {
+            double d = Coord(ordered[i]) - Coord(ordered[i - 1]);
+            if (d > t) gaps.Add(d);
+        }
+        double bigGap = gaps.Count > 0 ? gaps.OrderBy(g => g).ElementAt(gaps.Count / 2) : t * 2.0;
+        double threshold = bigGap * 0.5;
+
+        var lines = new List<List<VzPoint2D>>();
+        double maxC = double.NegativeInfinity;
+        foreach (var p in ordered)
+        {
+            double c = Coord(p);
+            if (lines.Count == 0 || c - maxC > threshold)
+            {
+                lines.Add(new List<VzPoint2D> { p });
+                maxC = c;
+            }
+            else
+            {
+                lines[lines.Count - 1].Add(p);
+                if (c > maxC) maxC = c;
+            }
+        }
+        return lines;
+    }
+
+    private static VzPoint2D[] SortRowScan(VzPoint2D[] pts, double tol)
+    {
+        if (tol <= 0) return pts.OrderBy(p => p.y).ThenBy(p => p.x).ToArray();
+        var rows = ClusterLines(pts, tol, byX: false);
+        return rows.SelectMany(r => r.OrderBy(p => p.x)).ToArray();
+    }
+
+    private static VzPoint2D[] SortSerpentine(VzPoint2D[] pts, double tol, bool horizontal)
+    {
+        var lines = ClusterLines(pts, tol, byX: !horizontal); // 横向→按Y分行；纵向→按X分列
+        var result = new List<VzPoint2D>();
+        for (int i = 0; i < lines.Count; i++)
+        {
+            bool forward = (i % 2 == 0);
+            if (horizontal)
+                result.AddRange(forward ? lines[i].OrderBy(p => p.x) : lines[i].OrderByDescending(p => p.x));
+            else
+                result.AddRange(forward ? lines[i].OrderBy(p => p.y) : lines[i].OrderByDescending(p => p.y));
+        }
+        return result.ToArray();
+    }
+
+    private static void Centroid(VzPoint2D[] pts, out double cx, out double cy)
+    {
+        cx = pts.Average(p => p.x); cy = pts.Average(p => p.y);
+    }
+
+    private static VzPoint2D[] SortAngular(VzPoint2D[] pts)
+    {
+        Centroid(pts, out var cx, out var cy);
+        return pts.Select(p =>
+        {
+            double dx = p.x - cx, dy = p.y - cy;
+            return new { p, a = Math.Atan2(dy, dx), r = Math.Sqrt(dx * dx + dy * dy) };
+        }).OrderBy(x => x.a).ThenBy(x => x.r).Select(x => x.p).ToArray();
+    }
+
+    private static VzPoint2D[] SortRadius(VzPoint2D[] pts)
+    {
+        Centroid(pts, out var cx, out var cy);
+        return pts.Select(p =>
+        {
+            double dx = p.x - cx, dy = p.y - cy;
+            return new { p, a = Math.Atan2(dy, dx), r = Math.Sqrt(dx * dx + dy * dy) };
+        }).OrderBy(x => x.r).ThenBy(x => x.a).Select(x => x.p).ToArray();
     }
 
     private static void EnsureServerListening(Node node)
@@ -431,6 +538,32 @@ public sealed class DagEngine
             case string s when double.TryParse(s, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var parsed): d = parsed; return true;
             default: return false;
+        }
+    }
+
+    /// <summary>把任意端口值格式化为字符串（TypeConvert / SaveData 用）。</summary>
+    private static string FormatValue(object? v, string format)
+    {
+        if (v is null) return "";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        switch (v)
+        {
+            case string s: return s;
+            case double d: return string.IsNullOrEmpty(format) ? d.ToString(inv) : d.ToString(format, inv);
+            case float f: return string.IsNullOrEmpty(format) ? f.ToString(inv) : ((double)f).ToString(format, inv);
+            case int i: return string.IsNullOrEmpty(format) ? i.ToString(inv) : i.ToString(format, inv);
+            case long l: return string.IsNullOrEmpty(format) ? l.ToString(inv) : l.ToString(format, inv);
+            case bool b: return b ? "True" : "False";
+            case VzPoint2D p: return $"({p.x.ToString(inv)}, {p.y.ToString(inv)})";
+            case VzPose2D pose: return $"({pose.point.x.ToString(inv)}, {pose.point.y.ToString(inv)}, {pose.angle.ToString(inv)}°)";
+            case VzPoint2D[] pa:
+            {
+                var parts = pa.Select(pp => $"({pp.x.ToString(inv)}, {pp.y.ToString(inv)})");
+                return "[" + string.Join(", ", parts) + "]";
+            }
+            case System.Collections.IEnumerable en when v is not byte[]:
+                return "[" + string.Join(", ", en.OfType<object>().Select(o => FormatValue(o, format))) + "]";
+            default: return v.ToString() ?? "";
         }
     }
 
@@ -573,7 +706,8 @@ public sealed class DagEngine
                 continue;
             }
             if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
-                or "ConstString" or "ConstNumber" or "ConstInteger")
+                or "ConstString" or "ConstNumber" or "ConstInteger"
+                or "TypeConvert" or "SaveData")
             {
                 results.Add(RunManagedNode(n, 0));
                 continue;

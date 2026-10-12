@@ -67,3 +67,15 @@ _test_*.txt
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.pyc
+
+# =========================
+# SDK / 打包产物（大体积二进制不入库，按 README 重新构建）
+# =========================
+sdk/bin/
+wafer_doc_gen/*.exe

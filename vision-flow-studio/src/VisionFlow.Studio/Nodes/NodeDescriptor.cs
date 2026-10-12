@@ -115,6 +115,7 @@ public static class NodeI18n
         { "ImageSource", "Image Source" }, { "CameraSource", "Camera" },
         { "ForLoop", "For Loop" }, { "Counter", "Counter" }, { "Accumulator", "Accumulator" },
         { "ConstString", "Const String" }, { "ConstNumber", "Const Number" }, { "ConstInteger", "Const Integer" },
+        { "TypeConvert", "Type Convert" }, { "SaveData", "Save Data" },
         { "IfCondition", "If Condition" }, { "IndexSelector", "Index Selector" },
         { "PointSort", "Point Sort" }, { "TextOutput", "Text Output" },
         { "MathFunc", "Math Function" }, { "MathOp", "Math Operation" },

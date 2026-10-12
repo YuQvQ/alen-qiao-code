@@ -1,0 +1,16 @@
+{
+  "type_id": "TypeConvert",
+  "display_name": "类型转换",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "TypeConvert" },
+  "inputs": [
+    { "name": "value", "type": "Any", "required": true, "description": "待转换的输入数据（任意类型）" }
+  ],
+  "outputs": [
+    { "name": "value", "type": "String", "required": true, "description": "转换后的字符串" }
+  ],
+  "parameters": [
+    { "name": "format", "type": "String", "default": "", "description": "数值格式串(如 F2 表示两位小数，留空=默认)" }
+  ]
+}

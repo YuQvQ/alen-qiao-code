@@ -1,0 +1,18 @@
+{
+  "type_id": "SaveData",
+  "display_name": "保存数据",
+  "category": "工具",
+  "icon": "icons/save.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "SaveData" },
+  "inputs": [
+    { "name": "path", "type": "String", "required": false, "description": "保存路径（未连接则用参数 path）" },
+    { "name": "value", "type": "Any", "required": false, "description": "要保存的值（任意类型，自动转字符串）" }
+  ],
+  "outputs": [
+    { "name": "ok", "type": "Int", "required": true, "description": "保存结果：1=成功 0=失败" }
+  ],
+  "parameters": [
+    { "name": "path", "type": "String", "default": "output.txt", "description": "默认保存路径（输入端口 path 未连接时使用）" },
+    { "name": "append", "type": "Int", "default": 1, "description": "写入模式", "enum": [[0, "覆盖"], [1, "追加"]] }
+  ]
+}
