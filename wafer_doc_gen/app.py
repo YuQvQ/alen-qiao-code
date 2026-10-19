@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 晶圆探针配方文档生成器 - 向导版 (exe)  现代化UI
-PDF 中 Y 偏移等数值显式带正负号。
+PDF 版式与参考文档（如 35D-6(2).pdf）一致：
+  页1  DIE/切割道(右上探卡布局图) + 探卡图规则(红) + 分割线 + 扎针偏移示意图
+  页2  探针晶圆映射图(每次扎针一张) + 晶圆信息原始 JSON
+       ● 探针晶圆映射图(多次扎针)(结构提供) / 最终输出
+       a. 探针拍照位置信息(双图并排)
+       b. 晶圆拍照点序号(左文右图, 序号红色)
+       c. 分组 Chuck/圆边/Mark 偏移(数值红色)
+       d/e. 探针拍照点数据 + DIE0 偏移(按扎针次数重复, 数值红色)
+       f. 配方参数(带行号代码框)
 """
 import os, json, tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
@@ -10,7 +18,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.colors import HexColor, black
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Preformatted,
-                                Image as RLImage, Table, TableStyle)
+                                Image as RLImage, Table, TableStyle, HRFlowable, KeepTogether)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -27,17 +35,36 @@ C_SUB = "#5b6b7c"; C_WARN = "#e74c3c"
 def reg_font():
     for p in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\simsun.ttc"]:
         if os.path.exists(p):
-            pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=0)); return "CJK"
-    return "Helvetica"
-CJK = reg_font()
-PRIMARY = HexColor("#1a365d"); ACCENT = HexColor("#2b6cb0")
-def st(n, sz, c=black, a=0, sa=6, ld=None):
-    return ParagraphStyle(n, fontName=CJK, fontSize=sz, leading=ld or sz*1.5,
+            pdfmetrics.registerFont(TTFont("CJK", p, subfontIndex=0)); break
+    else:
+        return "CJK", "CJK"
+    for p in [r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\simhei.ttf"]:
+        if os.path.exists(p):
+            pdfmetrics.registerFont(TTFont("CJKB", p, subfontIndex=0)); return "CJK", "CJKB"
+    return "CJK", "CJK"
+CJK, CJKB = reg_font()
+
+PRIMARY = HexColor("#1a365d"); RED = HexColor("#e03131"); GRAY = HexColor("#4a5568")
+
+def st(n, sz, c=black, a=0, sa=6, ld=None, font=None):
+    return ParagraphStyle(n, fontName=font or CJK, fontSize=sz, leading=ld or sz*1.5,
                           textColor=c, alignment=a, spaceAfter=sa, wordWrap="CJK")
-S_TITLE=st("t",22,PRIMARY,1,4); S_H1=st("h1",15,PRIMARY,0,8); S_H2=st("h2",12,ACCENT,0,6)
-S_BODY=st("b",10.5); S_BULLET=st("bu",10.5,black,0,4); S_LBL=st("l",10.5,HexColor("#4a5568"))
-S_CODE=ParagraphStyle("c",fontName=CJK,fontSize=8.5,leading=11,textColor=HexColor("#1a202c"),wordWrap="CJK")
+S_TITLE = st("t", 20, PRIMARY, 0, 10, font=CJKB)
+S_H1    = st("h1", 14, PRIMARY, 0, 8, font=CJKB)
+S_SEC   = st("sec", 11.5, PRIMARY, 0, 6, font=CJKB)
+S_BODY  = st("b", 10.5)
+S_BULLET= st("bu", 10.5, black, 0, 4, font=CJKB)
+S_LBL   = st("l", 10.5, GRAY)
+S_RED   = st("r", 10.5, RED)
+S_REDB  = st("rb", 10.5, RED, 0, 6, font=CJKB)
+S_CODE  = ParagraphStyle("c", fontName=CJK, fontSize=8.5, leading=11,
+                         textColor=HexColor("#1a202c"), wordWrap="CJK")
+S_CODENO= ParagraphStyle("cn", fontName="Helvetica", fontSize=8.5, leading=11,
+                         textColor=HexColor("#9aa5b1"), alignment=2)
+S_CODEHDR = st("ch", 9, HexColor("#9aa5b1"), 0, 0)
+
 PROBE_RULE = "探针卡右侧第一个针扎的是Mapping图右侧第一列晶圆"
+CN_ROUND = ["第一次", "第二次", "第三次"]
 
 # 数值显式带正负号: 0.705 -> +0.705, -0.705 -> -0.705, 0 -> 0
 def fmt_signed(v):
@@ -47,8 +74,7 @@ def fmt_signed(v):
         return str(v)
     if abs(v) < 1e-9:
         return "0"
-    s = ("%+.3f" % v).rstrip("0").rstrip(".")
-    return s
+    return ("%+.3f" % v).rstrip("0").rstrip(".")
 
 def calc_offsets(die_w, base, rule, direction):
     n = 3 if rule == "1/3" else 4
@@ -70,13 +96,17 @@ def integ(v, label):
     try: return int(float(v))
     except ValueError: raise ValueError(f"「{label}」的值 “{v}” 不是有效整数")
 
-def fit_image(path, max_w=80*mm, max_h=110*mm):
-    if not HAVE_PIL: return RLImage(path, width=max_w)
-    im = PILImage.open(path); w, h = im.size
-    ratio = min(max_w / w, max_h / h, 1.0)
-    return RLImage(path, width=w*ratio, height=h*ratio)
+def fit_image(path, max_w=80*mm, max_h=110*mm, halign=None):
+    if not HAVE_PIL:
+        img = RLImage(path, width=max_w)
+    else:
+        im = PILImage.open(path); w, h = im.size
+        ratio = min(max_w / w, max_h / h, 1.0)
+        img = RLImage(path, width=w*ratio, height=h*ratio)
+    if halign: img.hAlign = halign
+    return img
 
-def side_table(left_flowables, img_path, left_w=70*mm, right_w=100*mm, img_max_h=115*mm):
+def side_table(left_flowables, img_path, left_w=70*mm, right_w=105*mm, img_max_h=95*mm):
     if img_path and os.path.exists(img_path):
         try: right = fit_image(img_path, max_w=right_w, max_h=img_max_h)
         except Exception: right = Paragraph("(图片加载失败)", S_LBL)
@@ -87,19 +117,88 @@ def side_table(left_flowables, img_path, left_w=70*mm, right_w=100*mm, img_max_h
                            ("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     return t
 
-def collect(E, rows_text, vm_text, probe_img, map_img, pos_img, wafer_raw_json, nround):
+def img_row(paths, total_w=175*mm, max_h=70*mm):
+    """多张图片并排一行。"""
+    cells = []
+    for p in paths:
+        if p and os.path.exists(p):
+            try: cells.append(fit_image(p, max_w=total_w/max(len(paths),1)-6*mm, max_h=max_h))
+            except Exception: cells.append(Paragraph("(图片加载失败)", S_LBL))
+    if not cells: return Spacer(1, 0)
+    w = total_w / len(cells)
+    t = Table([cells], colWidths=[w]*len(cells))
+    t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("ALIGN",(0,0),(-1,-1),"CENTER"),
+                           ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),3),
+                           ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    return t
+
+def json_compact(obj, indent=2, _lv=0):
+    """JSON 序列化：数字/短值数组紧凑在一行（仿参考文档配方参数格式）。"""
+    pad = " " * (indent * _lv); pad1 = " " * (indent * (_lv + 1))
+    if isinstance(obj, dict):
+        if not obj: return "{}"
+        items = [f'{pad1}{json.dumps(str(k), ensure_ascii=False)}: {json_compact(v, indent, _lv+1)}'
+                 for k, v in obj.items()]
+        return "{\n" + ",\n".join(items) + "\n" + pad + "}"
+    if isinstance(obj, (list, tuple)):
+        if not obj: return "[]"
+        if all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in obj):
+            return "[" + ",".join(json.dumps(x, ensure_ascii=False) for x in obj) + "]"
+        items = [pad1 + json_compact(x, indent, _lv+1) for x in obj]
+        return "[\n" + ",\n".join(items) + "\n" + pad + "]"
+    return json.dumps(obj, ensure_ascii=False)
+
+def code_block(text):
+    """带「代码块」标头和行号的代码框（仿参考文档样式），整体不跨页拆分。"""
+    lines = text.splitlines()
+    nums = "\n".join(str(i+1) for i in range(len(lines)))
+    inner = Table([[Preformatted(nums, S_CODENO), Preformatted(text, S_CODE)]],
+                  colWidths=[11*mm, None])
+    inner.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
+                               ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2),
+                               ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
+    box = Table([[Paragraph("代码块", S_CODEHDR)], [inner]], colWidths=[None])
+    box.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1),HexColor("#f7f8fa")),
+        ("BOX",(0,0),(-1,-1),0.6,HexColor("#e1e4e8")),
+        ("LINEBELOW",(0,0),(0,0),0.6,HexColor("#e1e4e8")),
+        ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    return KeepTogether(box)
+
+def collect(E, rows_text, vm_text, images, wafer_raw_json, nround, direction_left, cde_texts=None):
+    """cde_texts: dict with keys cx,cy,dx,dy,ex,ey (string values, absolute, no sign)"""
     g = lambda k: E[k].get().strip()
     die_w = num(g("die_w"), "DIE 宽"); die_h = num(g("die_h"), "DIE 高")
     sc_w = num(g("sc_w"), "切割道宽"); sc_h = num(g("sc_h"), "切割道高")
     rows = [r for r in rows_text.splitlines() if r.strip()]
     try: vm = json.loads(vm_text) if vm_text.strip() else {}
     except Exception as ex: raise ValueError(f"配方参数 JSON 解析失败: {ex}")
+
+    # CDE 三点: 用用户填的绝对值, 按固定符号规则拼正负号
+    if cde_texts is not None:
+        def _c(a, b):
+            try: return round(abs(float(a)), 3), round(abs(float(b)), 3)
+            except Exception: raise ValueError(f"配方 C/D/E 坐标必须是数字")
+        cx, cy = _c(cde_texts.get("cx","0"), cde_texts.get("cy","0"))
+        dx, dy = _c(cde_texts.get("dx","0"), cde_texts.get("dy","0"))
+        ex, ey = _c(cde_texts.get("ex","0"), cde_texts.get("ey","0"))
+        # 固定符号规则 (不管方向/晶圆尺寸): C(+x,+y) D(+x,-y) E(-x,+y)
+        pps = vm.get("probe_point_set", {})
+        pps["C"] = [+cx, +cy]
+        pps["D"] = [+dx, -dy]
+        pps["E"] = [-ex, +ey]
+        vm["probe_point_set"] = pps
     rounds = []
     for i in range(nround):
-        rounds.append({"label": f"第{i+1}扎针",
-                       "A": integ(g(f"A{i}"), f"第{i+1}次 A"),
+        rounds.append({"A": integ(g(f"A{i}"), f"第{i+1}次 A"),
                        "B": integ(g(f"B{i}"), f"第{i+1}次 B"),
                        "C": integ(g(f"C{i}"), f"第{i+1}次 C")})
+    # DIE0 偏移: 一组 (d/e 节只输出一次)
+    die0s = []
+    dx = g("d0x"); dy = g("d0y"); dr = g("d0rmk")
+    num(dx, "DIE0 X"); num(dy, "DIE0 Y")
+    die0s.append({"x": dx, "y": dy, "remark": dr})
     cfg = {"product_name": g("name"), "doc_suffix": f"({nround})", "id": g("id"),
         "die": {"height": die_h, "width": die_w},
         "scribe_line": {"width": sc_w, "height": sc_h, "material": g("material"), "has_test_key": True},
@@ -109,10 +208,11 @@ def collect(E, rows_text, vm_text, probe_img, map_img, pos_img, wafer_raw_json, 
             "wafer_size": integ(g("wafer_size"), "晶圆尺寸"), "wafer_diameter": num(g("wafer_dia"), "晶圆直径"),
             "gdpw": integ(g("gdpw"), "gdpw"), "rows": rows},
         "probe_card": {"rule": PROBE_RULE, "extra_note": g("pc_extra")},
-        "puncture": {"rule_desc": g("pun_desc"), "rounds": rounds}, "groups": [],
-        "die0_offset": {"x": num(g("d0x"), "DIE0 X"), "y": num(g("d0y"), "DIE0 Y"), "remark": g("d0rmk")},
-        "vm_params": vm, "probe_img": probe_img, "map_img": map_img, "pos_img": pos_img,
-        "wafer_raw_json": wafer_raw_json}
+        "puncture": {"rule_desc": g("pun_desc"), "rounds": rounds},
+        "direction_left": direction_left,
+        "groups": [], "die0_offsets": die0s,
+        "vm_params": vm, "wafer_raw_json": wafer_raw_json}
+    cfg.update(images)
     for i in range(nround):
         y = num(g(f"gy{i}"), f"分组{i+1} Y偏移")
         cfg["groups"].append({"name": f"分组{i+1}", "center_offset": g(f"gco{i}"),
@@ -129,48 +229,105 @@ def _wafer_obj(cfg):
                 "thickness": cfg["thickness"]}, "id": cfg["id"]}
 
 def _vm_obj(cfg):
-    p = dict(cfg["vm_params"]); r = cfg["puncture"]["rounds"][0]
-    p["die_idxs"] = [r["A"], r["B"], r["C"]]
+    """die_idxs 用第1次扎针序号，插入到 gate_algorithm 之后（与参考文档一致）。"""
+    r = cfg["puncture"]["rounds"][0]
+    idxs = [r["A"], r["B"], r["C"]]
+    src = dict(cfg["vm_params"]); src.pop("die_idxs", None)
+    p = {}
+    for k, v in src.items():
+        p[k] = v
+        if k == "gate_algorithm": p["die_idxs"] = idxs
+    if "die_idxs" not in p: p["die_idxs"] = idxs
     return {"vm_params": p}
 
 def build_story(cfg):
-    s = []; P = lambda t, st: s.append(Paragraph(t, st))
+    s = []; P = lambda t, st_: s.append(Paragraph(t, st_))
+    die = cfg["die"]; sc = cfg["scribe_line"]; nround = len(cfg["puncture"]["rounds"])
+
+    # ===== 页1: 标题 + 晶圆信息(结构提供) =====
     P(f"{cfg['product_name']}{cfg['doc_suffix']}", S_TITLE)
-    P("晶圆信息 结构提供", S_H1)
-    die = cfg["die"]; sc = cfg["scribe_line"]
-    P("● DIE宽高", S_BULLET); P(f"高: {die['height']}", S_BODY); P(f"宽: {die['width']}", S_BODY)
-    P("● 切割道宽高", S_BULLET); P(f"宽: {sc['width']}", S_BODY); P(f"高: {sc['height']}", S_BODY)
-    pc = [Paragraph("● 探卡图", S_BULLET), Paragraph(f"规则: {PROBE_RULE}", S_BODY)]
-    if cfg["probe_card"].get("extra_note"): pc.append(Paragraph(cfg["probe_card"]["extra_note"], S_BODY))
-    s.append(side_table(pc, cfg.get("probe_img"))); s.append(Spacer(1, 4))
-    P("晶圆信息", S_H2)
+    P("晶圆信息(结构提供)", S_H1)
+    left = [Paragraph("● DIE宽高", S_BULLET),
+            Paragraph(f"高: {die['height']}", S_BODY), Paragraph(f"宽: {die['width']}", S_BODY),
+            Spacer(1, 4),
+            Paragraph("● 切割道宽高", S_BULLET),
+            Paragraph(f"宽: {sc['width']}", S_BODY), Paragraph(f"高: {sc['height']}", S_BODY)]
+    s.append(side_table(left, cfg.get("img_info"), left_w=70*mm, right_w=105*mm, img_max_h=95*mm))
+    s.append(Spacer(1, 6))
+
+    # 探卡图: 规则(红) + 说明 + 分割线 + 示意图
+    P("● 探卡图", S_BULLET)
+    P(f"规则: {PROBE_RULE}", S_RED)
+    if cfg["probe_card"].get("extra_note"): P(cfg["probe_card"]["extra_note"], S_BODY)
+    s.append(HRFlowable(width="100%", thickness=0.7, color=HexColor("#d0d5dd"),
+                        spaceBefore=8, spaceAfter=8))
+    if cfg.get("img_probe_card") and os.path.exists(cfg["img_probe_card"]):
+        try: s.append(fit_image(cfg["img_probe_card"], max_w=120*mm, max_h=95*mm, halign="CENTER"))
+        except Exception: P("(探卡图加载失败)", S_LBL)
+
+    # ===== 页2: 探针晶圆映射图(每次扎针一张) + 晶圆信息 JSON =====
+    maps = cfg.get("img_maps") or []
+    if maps:
+        s.append(img_row(maps, total_w=175*mm, max_h=62*mm)); s.append(Spacer(1, 8))
+    P("晶圆信息", S_SEC)
     raw = (cfg.get("wafer_raw_json") or "").strip()
     s.append(Preformatted(raw if raw else json.dumps(_wafer_obj(cfg), ensure_ascii=False, indent=2), S_CODE))
-    s.append(Spacer(1, 6))
+    s.append(Spacer(1, 8))
+
+    # ===== 探针晶圆映射图(多次扎针)(结构提供) / 最终输出 =====
     P("● 探针晶圆映射图 (多次扎针)(结构提供)", S_BULLET)
-    P("最终输出", S_H2)
-    s.append(side_table([Paragraph("a. 探针拍照位置信息", S_BODY)], cfg.get("pos_img"))); s.append(Spacer(1, 4))
-    b_left = [Paragraph("b. 晶圆拍照点序号", S_BODY), Paragraph("基于探针晶圆映射图", S_LBL)]
-    for r in cfg["puncture"]["rounds"]:
-        b_left.append(Paragraph(r["label"], S_BODY))
-        b_left.append(Paragraph(f"A点序号 {r['A']}<br/>B点序号 {r['B']}<br/>C点序号 {r['C']}", S_BODY))
-    if cfg["puncture"].get("rule_desc"): b_left.append(Paragraph(cfg["puncture"]["rule_desc"], S_LBL))
-    s.append(side_table(b_left, cfg.get("map_img"))); s.append(Spacer(1, 4))
-    P("c. 多次扎针Chuck接料位偏移, 圆边识别偏移, 晶圆Mark偏移", S_BODY)
+    P("最终输出", S_SEC)
+
+    # a. 探针拍照位置信息（左：探针晶圆映射图第1张，右：探卡图）
+    P("a. 探针拍照位置信息", S_SEC)
+    a_imgs = []
+    _maps = cfg.get("img_maps") or []
+    if _maps: a_imgs.append(_maps[0])
+    if cfg.get("img_probe_card"): a_imgs.append(cfg["img_probe_card"])
+    if a_imgs:
+        s.append(img_row(a_imgs, total_w=175*mm, max_h=72*mm)); s.append(Spacer(1, 8))
+
+    # b. 晶圆拍照点序号（左文右图）
+    P("b. 晶圆拍照点序号", S_SEC)
+    b_left = [Paragraph("基于探针晶圆映射图", S_BODY)]
+    for i, r in enumerate(cfg["puncture"]["rounds"]):
+        label = f"{CN_ROUND[i]}(调试基于第一次)" if i == 0 else CN_ROUND[i]
+        b_left.append(Paragraph(label, S_BODY))
+        b_left.append(Paragraph(f"A点序号 {r['A']}<br/>B点序号 {r['B']}<br/>C点序号 {r['C']}", S_RED))
+        if i == 0 and nround > 1:
+            dline = "晶圆往左移动 偏移“-”" if cfg.get("direction_left", True) else "晶圆往右移动 偏移“+”"
+            b_left.append(Paragraph(dline, S_REDB))
+    if cfg["puncture"].get("rule_desc"): b_left.append(Paragraph(cfg["puncture"]["rule_desc"], S_RED))
+    s.append(side_table(b_left, cfg.get("img_map"), left_w=92*mm, right_w=83*mm, img_max_h=95*mm))
+    s.append(Spacer(1, 6))
+
+    # c. 分组偏移（数值红色）
+    P("c. 多次扎针Chuck接料位偏移, 圆边识别偏移, 晶圆Mark偏移", S_SEC)
     for g in cfg["groups"]:
-        h = g["name"] + (f"（离晶圆圆心偏移 {g['center_offset']}）" if g.get("center_offset") else "")
-        P(h, S_H2)
+        if g.get("center_offset"):
+            P(f'● {g["name"]}（离晶圆圆心偏移 <font color="#e03131">{g["center_offset"]}</font>）', S_BULLET)
+        else:
+            P(f'● {g["name"]}', S_BULLET)
         Y = fmt_signed(g["chuck_y"])
-        P(f"1. 接料位 Chuck接料位偏移 Y {Y}", S_BODY)
-        P(f"2. 晶圆拍照点新增分组, 晶圆拍照点点位不变, 序号改成A点序号 {g['A']} B点序号 {g['B']} C点序号 {g['C']}", S_BODY)
-        P(f"3. 圆边拍照点新增分组 圆边A,B,C拍照点 Y {fmt_signed(g['edge_y'])}", S_BODY)
-        P(f"4. 晶圆Mark新增分组, 晶圆Mark偏移 Y {fmt_signed(g['mark_y'])}", S_BODY)
-    P("d. 探针拍照点数据(探针纠偏用", S_BODY); P("参考f.配方参数的 probe_point_set", S_LBL)
-    P("e. DIE0相对于探卡中心偏移量", S_BODY)
-    d0 = cfg["die0_offset"]
-    P(f"偏差值X,Y [{fmt_signed(d0['x'])},{fmt_signed(d0['y'])}] {d0.get('remark','')}", S_BODY)
-    P("f. 配方参数", S_H2)
-    s.append(Preformatted(json.dumps(_vm_obj(cfg), ensure_ascii=False, indent=2), S_CODE))
+        P(f'1. 接料位 Chuck接料位偏移 <font color="#e03131">Y {Y}</font>', S_BODY)
+        P(f'2. 晶圆拍照点新增分组, 晶圆拍照点点位不变, 序号改成'
+          f'<font color="#e03131">A点序号 {g["A"]} B点序号 {g["B"]} C点序号 {g["C"]}</font>', S_BODY)
+        P(f'3. 圆边拍照点新增分组 <font color="#e03131">圆边A,B,C拍照点 Y {fmt_signed(g["edge_y"])}</font>', S_BODY)
+        P(f'4. 晶圆Mark新增分组, 晶圆Mark偏移 <font color="#e03131">Y {fmt_signed(g["mark_y"])}</font>', S_BODY)
+        s.append(Spacer(1, 4))
+
+    # d/e. 探针拍照点数据 + DIE0 偏移 (只输出一次, 一组)
+    P("d. 探针拍照点数据(探针纠偏用", S_SEC)
+    P('参考f.配方参数的 <font color="#e03131">probe_point_set</font>', S_BODY)
+    P("e. DIE0相对于探卡中心偏移量", S_SEC)
+    if cfg["die0_offsets"]:
+        d0 = cfg["die0_offsets"][0]
+        rmk = f" {d0['remark']}" if d0.get("remark") else ""
+        P(f"偏差值X,Y [{d0['x']},{d0['y']}]{rmk}", S_RED)
+
+    # f. 配方参数（带行号代码框）
+    P("f. 配方参数", S_SEC)
+    s.append(code_block(json_compact(_vm_obj(cfg))))
     return s
 
 FONT_BASE = ("微软雅黑", 10); FONT_BOLD = ("微软雅黑", 10, "bold"); FONT_H = ("微软雅黑", 13, "bold")
@@ -182,7 +339,9 @@ class App:
         root.geometry("1040x740"); root.minsize(940, 660)
         root.configure(bg=C_BG)
         self.entries = {}
-        self.probe_img = ""; self.map_img = ""; self.pos_img = ""; self.wafer_raw_json = ""
+        self.img_info = ""; self.img_probe_card = ""; self.img_map = ""
+        self.img_maps = []
+        self.wafer_raw_json = ""
         self.nround = tk.IntVar(value=2)
         self.direct = tk.StringVar(value="往左 (Y偏移为负, 后续序号 +1)")
         self._build_header()
@@ -229,11 +388,13 @@ class App:
                          padx=18, pady=6, cursor="hand2", activebackground=color, activeforeground="white")
 
     def field(self, parent, label, key, val="", row=0, col=0, width=18, ro=False):
-        tk.Label(parent, text=label, bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=row, column=col*2, sticky="e", padx=8, pady=6)
+        if label:
+            tk.Label(parent, text=label, bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=row, column=col*2, sticky="e", padx=8, pady=6)
+            col = col*2+1
         e = tk.Entry(parent, width=width, textvariable=tk.StringVar(value=val), font=("Consolas", 10), relief="solid", bd=1,
                      disabledbackground="#f0f3f7", disabledforeground=C_TEXT)
         if ro: e.config(state="disabled")
-        e.grid(row=row, column=col*2+1, sticky="w", padx=8, pady=6)
+        e.grid(row=row, column=col, sticky="w", padx=8, pady=6)
         self.entries[key] = e; return e
 
     def page_title(self, parent, text):
@@ -250,7 +411,7 @@ class App:
         return [
             {"title":"上传晶圆信息 JSON", "build":self.page1, "validate":self.v1},
             {"title":"基本信息 / DIE / 切割道", "build":self.page2, "validate":self.v2},
-            {"title":"上传 3 张图片", "build":self.page3, "validate":self.v3},
+            {"title":"上传图片", "build":self.page3, "validate":self.v3},
             {"title":"扎针序号与晶圆方向", "build":self.page4, "validate":self.v4},
             {"title":"分组 Y 偏移", "build":self.page5, "validate":self.v5},
             {"title":"DIE0 偏移", "build":self.page6, "validate":self.v6},
@@ -288,7 +449,7 @@ class App:
         self.field(g2, "DIE 高 h_x", "die_h", "3.84", 0, 0); self.field(g2, "DIE 宽 w_y", "die_w", "2.86", 0, 1)
         self.field(g2, "切割道宽", "sc_w", "0.1", 1, 0); self.field(g2, "切割道高", "sc_h", "0.1", 1, 1)
         self.field(g2, "切割道材料", "material", "Si", 2, 0)
-        tk.Label(f, text="探卡图说明（规则固定：居中设计）", bg=C_CARD, fg=C_HEADER, font=("微软雅黑",11,"bold")).pack(anchor="w", padx=4, pady=(10,0))
+        tk.Label(f, text="探卡图说明", bg=C_CARD, fg=C_HEADER, font=("微软雅黑",11,"bold")).pack(anchor="w", padx=4, pady=(10,0))
         g3 = tk.Frame(f, bg=C_CARD); g3.pack(fill="x", padx=4)
         tk.Label(g3, text="规则(固定)", bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=0, column=0, sticky="e", padx=8, pady=6)
         tk.Label(g3, text=PROBE_RULE, bg=C_CARD, fg=C_ACCENT, font=FONT_BASE).grid(row=0, column=1, sticky="w", padx=8, pady=6)
@@ -303,20 +464,31 @@ class App:
             return True, ""
         except ValueError as e: return False, str(e)
 
+    IMG_SLOTS = [
+        ("info",       "晶圆信息图", "第1页右上方（晶圆信息(结构提供) 右侧）", False),
+        ("probe_card", "探卡图", "第1页『● 探卡图』下方（分割线后），并用于 a 节右侧", False),
+        ("maps",       "探针晶圆映射图", "第2页顶部，每次扎针一张（可多选），a 节左侧取第 1 张", True),
+        ("map",        "晶圆mapping图（拍照点序号）", "b 节右侧", False),
+    ]
+
     def page3(self, f):
-        self.page_title(f, "步骤 3  上传 3 张图片")
-        self.note(f, "探卡图 → 探卡说明右侧；Mapping图 → 晶圆拍照点序号右侧；探针信息位置图 → 探针拍照位置右侧。")
-        for which, lbl, attr in [("probe","探卡图","probe_lbl"),("map","Mapping图","map_lbl"),("pos","探针信息位置图","pos_lbl")]:
-            rowf = tk.Frame(f, bg=C_CARD); rowf.pack(fill="x", pady=8, padx=4)
-            tk.Button(rowf, text=f"  上传 {lbl}  ", command=lambda w=which: self.load_img(w), bg="#5a8dee",
-                      fg="white", font=FONT_BOLD, relief="flat", padx=12, pady=6, cursor="hand2").pack(side="left")
-            sv = tk.StringVar(value="未上传"); setattr(self, attr, sv)
-            tk.Label(rowf, textvariable=sv, bg=C_CARD, fg=C_DONE, font=FONT_BOLD).pack(side="left", padx=12)
+        self.page_title(f, "步骤 3  上传图片（与参考文档位置一一对应）")
+        self.note(f, "晶圆信息图→页1右上；探卡图→页1『● 探卡图』下方(并用于 a 节右侧)；"
+                     "探针晶圆映射图→页2顶部(每次扎针一张，a 节左侧取第1张)；晶圆mapping图→b 节右侧。")
+        for key, lbl, where, multi in self.IMG_SLOTS:
+            rowf = tk.Frame(f, bg=C_CARD); rowf.pack(fill="x", pady=6, padx=4)
+            tk.Button(rowf, text=f"  上传 {lbl}  ", command=lambda k=key, m=multi, l=lbl: self.load_img(k, m, l),
+                      bg="#5a8dee", fg="white", font=FONT_BOLD, relief="flat", padx=12, pady=6,
+                      cursor="hand2").pack(side="left")
+            sv = tk.StringVar(value="未上传"); setattr(self, f"{key}_lbl", sv)
+            tk.Label(rowf, textvariable=sv, bg=C_CARD, fg=C_DONE, font=FONT_BOLD).pack(side="left", padx=10)
+            tk.Label(rowf, text=where, bg=C_CARD, fg=C_SUB, font=("微软雅黑",9)).pack(side="left", padx=8)
 
     def v3(self):
-        if not self.probe_img: return False, "请上传 探卡图"
-        if not self.map_img: return False, "请上传 Mapping图"
-        if not self.pos_img: return False, "请上传 探针信息位置图"
+        if not self.img_info: return False, "请上传 晶圆信息图"
+        if not self.img_probe_card: return False, "请上传 探卡图"
+        if not self.img_maps: return False, "请上传 探针晶圆映射图(至少1张)"
+        if not self.img_map: return False, "请上传 晶圆mapping图（拍照点序号）"
         return True, ""
 
     def page4(self, f):
@@ -336,16 +508,14 @@ class App:
     def build_round_rows(self):
         for w in self.round_frame.winfo_children(): w.destroy()
         n = self.nround.get()
-        heads = ["A","B","C"]
-        for ci, h in enumerate([""]+heads):
+        for ci, h in enumerate(["", "A", "B", "C"]):
             tk.Label(self.round_frame, text=h, bg=C_CARD, fg=C_HEADER, font=FONT_BOLD, width=8).grid(row=0, column=ci, padx=4, pady=2)
         for i in range(n):
-            tag = "第1次(填写)" if i==0 else f"第{i+1}次(自动)"
-            fg = C_TEXT if i==0 else C_DONE
+            tag = "第1次(填写)" if i == 0 else f"第{i+1}次(自动)"
+            fg = C_TEXT if i == 0 else C_DONE
             tk.Label(self.round_frame, text=tag, bg=C_CARD, fg=fg, font=FONT_BOLD, width=12).grid(row=i+1, column=0, padx=4, pady=2)
-            for ci, k in enumerate(heads):
-                e = self.field(self.round_frame, "", f"{k}{i}", "0", row=i+1, col=0, width=9, ro=(i!=0))
-                e.grid_forget(); e.grid(row=i+1, column=ci+1, padx=4, pady=2)
+            for ci, k in enumerate(["A", "B", "C"]):
+                e = self.field(self.round_frame, "", f"{k}{i}", "0", row=i+1, col=ci+1, width=9, ro=(i != 0))
         self.refresh_abc()
 
     def on_round_change(self):
@@ -378,37 +548,59 @@ class App:
         tk.Entry(ff, width=8, textvariable=self.base, font=("Consolas",10), relief="solid", bd=1).grid(row=0, column=3, padx=8)
         tk.Button(ff, text="  自动计算 Y 偏移  ", command=self.auto_calc, bg=C_ACCENT, fg="white",
                   font=FONT_BOLD, relief="flat", padx=12, pady=5, cursor="hand2").grid(row=0, column=4, padx=12)
-        tk.Label(f, text="分组 Y 偏移结果（可微调，最终PDF自动带正负号）", bg=C_CARD, fg=C_HEADER, font=("微软雅黑",11,"bold")).pack(anchor="w", padx=4, pady=(8,0))
+        tk.Label(f, text="分组 Y 偏移结果（可微调，最终PDF自动带正负号并标红）", bg=C_CARD, fg=C_HEADER, font=("微软雅黑",11,"bold")).pack(anchor="w", padx=4, pady=(8,0))
         self.group_frame = tk.Frame(f, bg=C_CARD); self.group_frame.pack(fill="x", padx=4, pady=4)
-        self.redraw_groups()
-        tk.Label(f, text="扎针规则描述(可选，写入文档)：", bg=C_CARD, fg=C_SUB, font=("微软雅黑",9)).pack(anchor="w", padx=4, pady=(6,0))
+        tk.Label(f, text="扎针规则描述(可选，红色写入文档)：", bg=C_CARD, fg=C_SUB, font=("微软雅黑",9)).pack(anchor="w", padx=4, pady=(6,0))
         self.pun_desc_e = tk.Entry(f, width=72, font=FONT_BASE, relief="solid", bd=1, textvariable=tk.StringVar(value=""))
         self.pun_desc_e.pack(anchor="w", padx=4, pady=2); self.entries["pun_desc"] = self.pun_desc_e
+
+    def redraw_groups(self):
+        if not hasattr(self, "group_frame"): return
+        for k in [k for k in self.entries if k.startswith("gy") or k.startswith("gco")]:
+            del self.entries[k]
+        for w in self.group_frame.winfo_children(): w.destroy()
+        for i in range(self.nround.get()):
+            tk.Label(self.group_frame, text=f"分组{i+1}  Y", bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=i, column=0, padx=8, pady=3)
+            ey = tk.Entry(self.group_frame, width=12, textvariable=tk.StringVar(value="0"), font=("Consolas",10), relief="solid", bd=1)
+            ey.grid(row=i, column=1, padx=8, pady=3); self.entries[f"gy{i}"] = ey
+            tk.Label(self.group_frame, text="离圆心偏移", bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=i, column=2, padx=8, pady=3)
+            eco = tk.Entry(self.group_frame, width=14, textvariable=tk.StringVar(value=""), font=("Consolas",10), relief="solid", bd=1)
+            eco.grid(row=i, column=3, padx=8, pady=3); self.entries[f"gco{i}"] = eco
 
     def v5(self):
         try:
             for i in range(self.nround.get()): num(self.entries[f"gy{i}"].get(), f"分组{i+1} Y偏移")
             return True, ""
-        except ValueError as e: return False, str(e)
+        except (ValueError, KeyError) as e: return False, str(e)
 
     def page6(self, f):
-        self.page_title(f, "步骤 6  DIE0 偏移")
-        g = tk.Frame(f, bg=C_CARD); g.pack(fill="x", padx=4, pady=4)
-        self.field(g, "DIE0 X", "d0x", "0", 0, 0); self.field(g, "DIE0 Y", "d0y", "0", 0, 1)
-        self.field(g, "备注", "d0rmk", "", 1, 0, 42)
-        bf = tk.Frame(f, bg=C_CARD); bf.pack(fill="x", padx=4, pady=6)
+        self.page_title(f, "步骤 6  DIE0 偏移（一组，对应 d/e 节）")
+        self.note(f, "只需填一组 X/Y/备注，文档中 d/e 节只输出这一组。偏差值按填写原样输出(红色)。")
+        bf = tk.Frame(f, bg=C_CARD); bf.pack(fill="x", padx=4, pady=4)
         self.die_plus_lbl = tk.StringVar(value="die宽+切割道 = --")
         tk.Label(bf, textvariable=self.die_plus_lbl, bg=C_CARD, fg=C_ACCENT, font=FONT_BOLD).pack(side="left", padx=4)
         for txt, key, sgn in [("X +","d0x",+1),("X −","d0x",-1),("Y +","d0y",+1),("Y −","d0y",-1)]:
             tk.Button(bf, text=txt, command=lambda k=key,s=sgn: self.die_plus(k,s), bg="#5a8dee",
                       fg="white", font=FONT_BOLD, relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left", padx=4)
+        self.die0_frame = tk.Frame(f, bg=C_CARD); self.die0_frame.pack(fill="x", padx=4, pady=6)
         self.update_die_plus()
+
+    def redraw_die0(self):
+        if not hasattr(self, "die0_frame"): return
+        for k in [k for k in self.entries if k.startswith("d0x") or k.startswith("d0y") or k.startswith("d0rmk")]:
+            del self.entries[k]
+        for w in self.die0_frame.winfo_children(): w.destroy()
+        tk.Label(self.die0_frame, text="DIE0", bg=C_CARD, fg=C_HEADER, font=FONT_BOLD, width=8).grid(row=0, column=0, padx=4, pady=3)
+        self.field(self.die0_frame, "X", f"d0x", "0", row=0, col=1, width=12)
+        self.field(self.die0_frame, "Y", f"d0y", "0", row=0, col=3, width=12)
+        self.field(self.die0_frame, "备注", f"d0rmk", "", row=0, col=5, width=46)
 
     def v6(self):
         try:
-            num(self.entries["d0x"].get(), "DIE0 X"); num(self.entries["d0y"].get(), "DIE0 Y")
+            num(self.entries["d0x"].get(), "DIE0 X")
+            num(self.entries["d0y"].get(), "DIE0 Y")
             return True, ""
-        except ValueError as e: return False, str(e)
+        except (ValueError, KeyError) as e: return False, str(e)
 
     def page7(self, f):
         self.page_title(f, "步骤 7  配方参数（最后一步，完成即可生成 PDF）")
@@ -417,7 +609,25 @@ class App:
                   font=FONT_BOLD, relief="flat", padx=12, pady=5, cursor="hand2").pack(side="left", padx=4)
         tk.Button(bf, text="载入默认模板", command=self.load_vm_default, bg="#8a97a5", fg="white",
                   font=FONT_BOLD, relief="flat", padx=12, pady=5, cursor="hand2").pack(side="left", padx=4)
-        self.vm_txt = scrolledtext.ScrolledText(f, height=20, font=("Consolas",8), relief="solid", bd=1)
+
+        # CDE 三点输入 (绝对值, 不带符号; 符号规则固定)
+        cde_frame = tk.Frame(f, bg=C_CARD, highlightbackground=C_BORDER, highlightthickness=1)
+        cde_frame.pack(fill="x", padx=4, pady=(0, 4))
+        tk.Label(cde_frame, text="probe_point_set  C/D/E 三点坐标（填绝对值，符号由程序自动加）",
+                 bg=C_CARD, fg=C_ACCENT, font=FONT_BOLD).grid(row=0, column=0, columnspan=7, sticky="w", padx=8, pady=(6,2))
+        tk.Label(cde_frame, text="固定规则: C(+x,+y)  D(+x,-y)  E(-x,+y)  与方向/晶圆尺寸无关",
+                 bg=C_CARD, fg="#8a97a5", font=("Microsoft YaHei", 8)).grid(row=1, column=0, columnspan=7, sticky="w", padx=8, pady=(0,6))
+
+        pts = [("C", "+x  +y", "cx", "cy"), ("D", "+x  -y", "dx", "dy"), ("E", "-x  +y", "ex", "ey")]
+        for i, (tag, rule, kx, ky) in enumerate(pts):
+            tk.Label(cde_frame, text=tag, bg=C_CARD, fg="#e03131", font=FONT_BOLD, width=2).grid(row=2, column=i*3, padx=(10,2), pady=6)
+            self.entries[kx] = tk.Entry(cde_frame, width=9, relief="solid", bd=1)
+            self.entries[kx].grid(row=2, column=i*3+1, padx=2, pady=6)
+            self.entries[ky] = tk.Entry(cde_frame, width=9, relief="solid", bd=1)
+            self.entries[ky].grid(row=2, column=i*3+2, padx=(2,10), pady=6)
+            tk.Label(cde_frame, text=rule, bg=C_CARD, fg="#8a97a5", font=("Microsoft YaHei", 8)).grid(row=3, column=i*3, columnspan=3, padx=10, pady=(0,6))
+
+        self.vm_txt = scrolledtext.ScrolledText(f, height=18, font=("Consolas",8), relief="solid", bd=1)
         self.vm_txt.pack(fill="both", expand=True, padx=4, pady=4)
         self.load_vm_default()
 
@@ -439,7 +649,9 @@ class App:
         for i in range(self.total):
             col = C_DONE if i < idx else (C_ACCENT if i == idx else C_GRAY)
             self.dot_labels[i].config(bg=col)
-            self.txt_labels[i].config(fg=("white" if i==idx else "#b8c5d6"))
+            self.txt_labels[i].config(fg=("white" if i == idx else "#b8c5d6"))
+        if idx == 4: self.redraw_groups()
+        if idx == 5: self.redraw_die0()
         for b in (self.btn_back, self.btn_next, self.btn_gen):
             try: b.pack_forget()
             except Exception: pass
@@ -468,6 +680,7 @@ class App:
 
     def die_plus(self, key, sign):
         try:
+            if key not in self.entries: return
             dw = float(self.entries["die_w"].get().strip() or 0); sw = float(self.entries["sc_w"].get().strip() or 0)
             cur = float(self.entries[key].get().strip() or 0)
             v = round(cur + sign*(dw+sw), 3)
@@ -476,29 +689,37 @@ class App:
 
     def auto_calc(self):
         try:
-            die_w = num(self.entries["die_w"].get(), "DIE 宽"); base = num(self.base.get(), "base")
-            rule = self.rule.get(); direction = "Y-" if self.direct.get().startswith("往左") else "Y+"
-            if die_w > 3.0 and rule == "1/4":
-                if messagebox.askyesno("提示", f"DIE宽 {die_w} > 3.0, 建议用 1/3 原则。是否切换?"):
-                    self.rule.set("1/3"); rule = "1/3"
-            g1, g2 = calc_offsets(die_w, base, rule, direction)
-            ys = [g1, g2] + [g2]*5
-            for i in range(self.nround.get()):
-                self.entries[f"gy{i}"].delete(0,"end"); self.entries[f"gy{i}"].insert(0, str(ys[i]))
-            messagebox.showinfo("完成", f"晶圆往{'左' if direction=='Y-' else '右'} (Y{'负' if direction=='Y-' else '正'}) 按 {rule} 计算:\n分组1 Y = {fmt_signed(g1)}\n分组2 Y = {fmt_signed(g2)}")
-        except Exception as ex: messagebox.showerror("错误", str(ex))
+            die_w = num(self.entries["die_w"].get(), "DIE 宽")
+            sc_w  = num(self.entries["sc_w"].get(), "切割道宽")
+            base = num(self.base.get(), "base")
+            ws = int(float(self.entries.get("wafer_size", tk.StringVar(value="0")).get().strip() or 0))
+            direction = "Y-" if self.direct.get().startswith("往左") else "Y+"
+            sign = -1.0 if direction == "Y-" else +1.0
+            nround = self.nround.get()
 
-    def redraw_groups(self):
-        if not hasattr(self, "group_frame"): return
-        for w in self.group_frame.winfo_children(): w.destroy()
-        n = self.nround.get()
-        for i in range(n):
-            tk.Label(self.group_frame, text=f"分组{i+1}  Y", bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=i, column=0, padx=8, pady=3)
-            ey = tk.Entry(self.group_frame, width=12, textvariable=tk.StringVar(value="0"), font=("Consolas",10), relief="solid", bd=1)
-            ey.grid(row=i, column=1, padx=8, pady=3); self.entries[f"gy{i}"] = ey
-            tk.Label(self.group_frame, text="离圆心偏移", bg=C_CARD, fg=C_TEXT, font=FONT_BASE).grid(row=i, column=2, padx=8, pady=3)
-            eco = tk.Entry(self.group_frame, width=14, textvariable=tk.StringVar(value=""), font=("Consolas",10), relief="solid", bd=1)
-            eco.grid(row=i, column=3, padx=8, pady=3); self.entries[f"gco{i}"] = eco
+            if ws == 6 and nround == 2:
+                # 6寸晶圆: 第1次 Y=0(中心), 第2次 Y=±(die宽+切割道宽)
+                g1 = base
+                g2 = round(base + sign * (die_w + sc_w), 3)
+                rule_txt = "6寸规则(0 / ±(die宽+切割道宽))"
+            else:
+                rule = self.rule.get()
+                if die_w > 3.0 and rule == "1/4":
+                    if messagebox.askyesno("提示", f"DIE宽 {die_w} > 3.0, 建议用 1/3 原则。是否切换?"):
+                        self.rule.set("1/3"); rule = "1/3"
+                g1, g2 = calc_offsets(die_w, base, rule, direction)
+                rule_txt = rule
+
+            ys = [g1, g2] + [g2] * max(0, nround - 2)
+            for i in range(nround):
+                self.entries[f"gy{i}"].delete(0, "end")
+                self.entries[f"gy{i}"].insert(0, str(ys[i]))
+            dir_txt = f"往{'左' if direction=='Y-' else '右'} (Y{'负' if direction=='Y-' else '正'})"
+            body = f"晶圆{dir_txt} 按 {rule_txt} 计算:\n"
+            for i in range(nround):
+                body += f"分组{i+1} Y = {fmt_signed(ys[i])}\n"
+            messagebox.showinfo("完成", body.strip())
+        except Exception as ex: messagebox.showerror("错误", str(ex))
 
     def load_wafer_json(self):
         f = filedialog.askopenfilename(filetypes=[("JSON","*.json"),("文本","*.txt"),("所有","*.*")])
@@ -525,16 +746,34 @@ class App:
         self.update_title(); self.update_die_plus()
         messagebox.showinfo("完成", "晶圆信息已导入，相关字段已自动填充。")
 
-    def load_img(self, which):
-        f = filedialog.askopenfilename(filetypes=[("图片","*.png;*.jpg;*.jpeg;*.bmp"),("所有","*.*")])
-        if not f: return
-        if which == "probe": self.probe_img = f; self.probe_lbl.set("✓ " + os.path.basename(f))
-        elif which == "map": self.map_img = f; self.map_lbl.set("✓ " + os.path.basename(f))
-        else: self.pos_img = f; self.pos_lbl.set("✓ " + os.path.basename(f))
+    def load_img(self, key, multi, label):
+        if multi:
+            fs = filedialog.askopenfilenames(filetypes=[("图片","*.png;*.jpg;*.jpeg;*.bmp"),("所有","*.*")])
+            if not fs: return
+            setattr(self, f"img_{key}", list(fs))
+            getattr(self, f"{key}_lbl").set(f"✓ 已选 {len(fs)} 张")
+        else:
+            f = filedialog.askopenfilename(filetypes=[("图片","*.png;*.jpg;*.jpeg;*.bmp"),("所有","*.*")])
+            if not f: return
+            setattr(self, f"img_{key}", f)
+            getattr(self, f"{key}_lbl").set("✓ " + os.path.basename(f))
+
+    def _sync_cde_from_vm(self):
+        """从 vm_txt 解析 probe_point_set, 把 CDE 三点取绝对值填入 entries。"""
+        try:
+            vm = json.loads(self.vm_txt.get("1.0","end").strip())
+            pps = vm.get("probe_point_set", {})
+            for tag, (kx, ky) in [("C",("cx","cy")),("D",("dx","dy")),("E",("ex","ey"))]:
+                pt = pps.get(tag, [0,0])
+                self.entries[kx].delete(0,"end"); self.entries[kx].insert(0, str(round(abs(float(pt[0])), 3)))
+                self.entries[ky].delete(0,"end"); self.entries[ky].insert(0, str(round(abs(float(pt[1])), 3)))
+        except Exception: pass
 
     def load_vm(self):
         f = filedialog.askopenfilename(filetypes=[("JSON","*.json"),("所有","*.*")])
-        if f: self.vm_txt.delete("1.0","end"); self.vm_txt.insert("1.0", open(f, encoding="utf-8").read())
+        if f:
+            self.vm_txt.delete("1.0","end"); self.vm_txt.insert("1.0", open(f, encoding="utf-8").read())
+            self._sync_cde_from_vm()
 
     def load_vm_default(self):
         d = {"gate_roi_width_px":300,"gate_roi_height_px":260,"gate_roi_angle_deg":1.0,
@@ -544,6 +783,7 @@ class App:
              "probe_point_set":{"A":[69.65,69.65],"B":[-69.65,-69.65],"C":[58.22,27.69],"D":[58.22,-38.62],"E":[-69.78,27.69]},
              "wafer_mark_recognition":0,"wafer_mark_exposure":200}
         self.vm_txt.delete("1.0","end"); self.vm_txt.insert("1.0", json.dumps(d, ensure_ascii=False, indent=2))
+        self._sync_cde_from_vm()
 
     def generate(self):
         try:
@@ -553,8 +793,11 @@ class App:
                     messagebox.showwarning("步骤未完成", f"第 {i+1} 步：{self.steps[i]['title']}\n{msg}")
                     self.show(i); return
             nround = int(self.nround.get())
+            cde_texts = {k: self.entries[k].get() for k in ("cx","cy","dx","dy","ex","ey")}
+            images = {"img_info": self.img_info, "img_probe_card": self.img_probe_card,
+                      "img_maps": list(self.img_maps), "img_map": self.img_map}
             cfg = collect(self.entries, self.rows_txt.get("1.0","end"), self.vm_txt.get("1.0","end"),
-                          self.probe_img, self.map_img, self.pos_img, self.wafer_raw_json, nround)
+                          images, self.wafer_raw_json, nround, self.direct.get().startswith("往左"), cde_texts)
             out = filedialog.asksaveasfilename(defaultextension=".pdf",
                 initialfile=f"{cfg['product_name']}{cfg['doc_suffix']}.pdf", filetypes=[("PDF","*.pdf")])
             if not out: return
