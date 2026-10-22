@@ -37,6 +37,7 @@ add_library(vision_algo SHARED
     src/line_find.cpp
     src/text_output.cpp
     src/calibration_transform.cpp
+    src/coordsys_convert.cpp
     src/position_tracking.cpp
     src/index_selector.cpp
     src/if_condition.cpp
@@ -78,6 +79,7 @@ add_library(vision_algo SHARED
     src/color_detect.cpp
     src/dnn_classify.cpp
     src/dnn_detect.cpp
+    src/dnn_detect_ort.cpp
     src/hik_camera.cpp
     src/bilateral_filter.cpp
     src/threshold.cpp
@@ -113,6 +115,15 @@ endif()
 
 target_link_libraries(vision_algo PRIVATE ${OpenCV_LIBS})
 
+# Python embed + onnxruntime（绕过 OpenCV 4.13 YOLO end-to-end bug）
+set(PYTHON_ROOT "C:/Users/qiaoy/AppData/Local/Programs/Python/Python314" CACHE PATH "Python root")
+target_include_directories(vision_algo PRIVATE "${PYTHON_ROOT}/include")
+# numpy C headers (numpy 2.x: _core/include, older: core/include)
+execute_process(COMMAND py -c "import numpy; print(numpy.get_include())" OUTPUT_VARIABLE NUMPY_INCLUDE OUTPUT_STRIP_TRAILING_WHITESPACE)
+target_include_directories(vision_algo PRIVATE "${NUMPY_INCLUDE}")
+target_link_libraries(vision_algo PRIVATE "${PYTHON_ROOT}/libs/python314.lib")
+target_compile_definitions(vision_algo PRIVATE USE_PYTHON_ORT NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION)
+
 set_target_properties(vision_algo PROPERTIES
     OUTPUT_NAME vision_algo
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
@@ -137,6 +148,48 @@ if(VISION_ALGO_BUILD_TESTS)
 endif()
 
 message(STATUS "vision_algo configuration complete.")
+
+# Standalone DnnDetect test
+add_executable(standalone_dnn_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/standalone_dnn_test.cpp
+)
+target_include_directories(standalone_dnn_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${OpenCV_INCLUDE_DIRS}
+)
+target_link_libraries(standalone_dnn_test PRIVATE vision_algo ${OpenCV_LIBS})
+set_target_properties(standalone_dnn_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Raw OpenCV forward dump (no DLL)
+add_executable(raw_opencv_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/raw_opencv_test.cpp
+)
+target_link_libraries(raw_opencv_test PRIVATE ${OpenCV_LIBS})
+set_target_properties(raw_opencv_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Backend enumeration test
+add_executable(backends_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/backends_test.cpp
+)
+target_link_libraries(backends_test PRIVATE ${OpenCV_LIBS})
+set_target_properties(backends_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# Python embed test (onnxruntime via Python)
+set(PYTHON_ROOT "C:/Users/qiaoy/AppData/Local/Programs/Python/Python314" CACHE PATH "Python root")
+add_executable(ort_embed_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/ort_embed_test.cpp
+)
+target_include_directories(ort_embed_test PRIVATE "${PYTHON_ROOT}/include")
+target_link_libraries(ort_embed_test PRIVATE "${PYTHON_ROOT}/libs/python314.lib")
+set_target_properties(ort_embed_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
 
 # Standalone test for LineFind on sample images
 add_executable(test_linefind_standalone

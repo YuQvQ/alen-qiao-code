@@ -325,11 +325,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            // 居中放置：节点宽 180，高约 80，让鼠标落点在节点中心
-            var node = NodeFactory.Create(desc,
-                x: Math.Max(0, pos.X - 90),
-                y: Math.Max(0, pos.Y - 40));
+            // 先按落点创建（左上角临时=落点），控件量出实际尺寸后由画布把中心对齐到落点
+            var node = NodeFactory.Create(desc, x: pos.X, y: pos.Y);
             _graph.AddNode(node);
+            CanvasHost.QueueCenterOnDrop(node, pos);
             StatusText.Text = $"已创建节点：{node.DisplayName}";
             Logger.Info("Canvas", $"创建节点 '{node.DisplayName}' (type_id={node.TypeId}) @ ({node.X:F0},{node.Y:F0})");
         }

@@ -65,9 +65,15 @@ VISION_API const char* vz_algo_describe(const char* algo_name);
 VISION_API const char* vz_algo_version(void);
 
 // 枚举当前在线的海康相机，返回 JSON 数组：
-// [{"sn":"...","model":"...","vendor":"...","type":"GigE/USB","user_name":"..."}, ...]
+// [{"sn":"...","model":"...","vendor":"...","type":"GigE/USB","user_name":"...",
+//   "ip":"192.168.x.x","subnet":"...","gateway":"..."}, ...]   ip/subnet/gateway 仅 GigE 有值
 // 枚举失败时返回 "[]"，错误信息可通过 vz_algo_last_error(nullptr) 获取。
 VISION_API const char* vz_enum_cameras(void);
+
+// 强制修改 GigE 相机的 IP/子网掩码/网关（点分十进制，无需打开设备，用于相机跨网段救砖）。
+// 成功返回 VZ_OK；失败返回错误码，详情 vz_algo_last_error(nullptr)。
+VISION_API int vz_camera_force_ip(const char* sn,
+                                  const char* ip, const char* netmask, const char* gateway);
 
 // 最后一次错误（ctx 为 null 时返回全局错误）
 VISION_API const char* vz_algo_last_error(VzAlgoCtx* ctx);

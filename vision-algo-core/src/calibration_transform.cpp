@@ -1,4 +1,4 @@
-﻿// calibration_transform.cpp — 标定矩阵转换算法实现
+// calibration_transform.cpp — 标定矩阵转换算法实现
 //
 // 端口：
 //   输入 matrix(String)  — JSON 3x3 矩阵 "[a,b,c,d,e,f,g,h,i]"（行优先）
@@ -63,24 +63,35 @@ int CalibrationTransformAlgo::setParam(const std::string& key, const std::string
 
 int CalibrationTransformAlgo::setInput(const std::string& port_name, const void* data, int type_tag) {
     if (port_name == "matrix") {
-        // 矩阵通过端口传入（String 类型，UTF-8 JSON）
-        if (type_tag != VZ_TYPE_STRING) {
-            setLastError("input 'matrix' expects String type");
-            return VZ_ERR_TYPE_MISMATCH;
-        }
-        if (!data) {
-            setLastError("input 'matrix' data is null");
-            return VZ_ERR_INVALID_ARG;
-        }
-        const char* s = static_cast<const char*>(data);
-        double m[9] = {1,0,0, 0,1,0, 0,0,1};
-        if (parseMatrix9(s, m)) {
-            fillMatrix(matrix_, m);
+        // 矩阵通过端口传入（CoordSys 类型；兼容旧的 String JSON 传法）
+        if (type_tag == VZ_TYPE_COORD_SYS) {
+            if (!data) {
+                setLastError("input 'matrix' data is null");
+                return VZ_ERR_INVALID_ARG;
+            }
+            const auto* cs = static_cast<const VzCoordSystem3x3*>(data);
+            cv::Mat m(3, 3, CV_64F, const_cast<double*>(cs->m));
+            m.copyTo(matrix_);
             has_port_matrix_ = true;
             return VZ_OK;
         }
-        setLastError("input 'matrix' parse failed; expect [a,b,c,d,e,f,g,h,i]");
-        return VZ_ERR_INVALID_ARG;
+        if (type_tag == VZ_TYPE_STRING) {
+            if (!data) {
+                setLastError("input 'matrix' data is null");
+                return VZ_ERR_INVALID_ARG;
+            }
+            const char* s = static_cast<const char*>(data);
+            double m[9] = {1,0,0, 0,1,0, 0,0,1};
+            if (parseMatrix9(s, m)) {
+                fillMatrix(matrix_, m);
+                has_port_matrix_ = true;
+                return VZ_OK;
+            }
+            setLastError("input 'matrix' parse failed; expect [a,b,c,d,e,f,g,h,i]");
+            return VZ_ERR_INVALID_ARG;
+        }
+        setLastError("input 'matrix' expects CoordSys type");
+        return VZ_ERR_TYPE_MISMATCH;
     }
     if (port_name == "point") {
         // 待转换坐标（Pose2D 类型）
@@ -148,7 +159,7 @@ const char* CalibrationTransformAlgo::describe() const {
   "icon":"icons/calibration.svg",
   "algo_binding":{"dll":"vision_algo","algo_name":"CalibrationTransform"},
   "inputs":[
-    {"name":"matrix","type":"String","required":false,"description":"3x3单应矩阵(JSON数组,行优先9个数)"},
+    {"name":"matrix","type":"CoordSys","required":false,"description":"3x3标定矩阵(坐标系类型,可用 String转坐标系 节点生成)"},
     {"name":"point","type":"Pose2D","required":true,"description":"待转换坐标(像素坐标)"}
   ],
   "outputs":[

@@ -14,6 +14,7 @@
 #include "line_find.h"
 #include "text_output.h"
 #include "calibration_transform.h"
+#include "coordsys_convert.h"
 #include "position_tracking.h"
 #include "index_selector.h"
 #include "if_condition.h"
@@ -237,6 +238,18 @@ VISION_API const char* vz_algo_last_error(VzAlgoCtx* ctx) {
     return impl->algo->lastError().c_str();
 }
 
+VISION_API int vz_camera_force_ip(const char* sn,
+                                  const char* ip, const char* netmask, const char* gateway) {
+    if (!sn || !ip || !netmask || !gateway) { setGlobalError("参数不能为空"); return VZ_ERR_INVALID_ARG; }
+    std::string err;
+    if (!vz::hik::forceIp(sn, ip, netmask, gateway, err)) {
+        setGlobalError(err);
+        return VZ_ERR_PROCESS;
+    }
+    setGlobalError("");
+    return VZ_OK;
+}
+
 // ============================================================
 // 连线路由（正交 / 可拐弯 / 绕开节点）
 // ============================================================
@@ -316,6 +329,16 @@ struct AutoRegistrar {
             "CalibrationTransform",
             &vz::CalibrationTransformAlgo::create,
             []() -> const char* { return vz::CalibrationTransformAlgo{}.describe(); }
+        });
+        vz::registerAlgo({
+            "StrToCoordSys",
+            &vz::StrToCoordSysAlgo::create,
+            []() -> const char* { return vz::StrToCoordSysAlgo{}.describe(); }
+        });
+        vz::registerAlgo({
+            "CoordSysToStr",
+            &vz::CoordSysToStrAlgo::create,
+            []() -> const char* { return vz::CoordSysToStrAlgo{}.describe(); }
         });
         vz::registerAlgo({
             "PositionTracking",

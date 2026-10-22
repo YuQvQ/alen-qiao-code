@@ -1,4 +1,4 @@
-// image_source.cpp — 图像源算法实现
+﻿// image_source.cpp — 图像源算法实现
 //
 // 行为：process() 时从 path_ 加载图像到 image_。
 // getOutput("image") 时把 cv::Mat 转 VzImage 返回（caller 释放）。
@@ -28,6 +28,10 @@ int ImageSourceAlgo::setParam(const std::string& key, const std::string& value_j
     if (key == "path") {
         // JSON 字符串可能带引号，剥离
         path_ = detail::parseJsonString(value_json);
+        return VZ_OK;
+    }
+    if (key == "pixel_format") {
+        pixel_format_ = detail::parseJsonString(value_json);  // BGR / Mono8 / RGB
         return VZ_OK;
     }
     if (key == "index") {
@@ -100,7 +104,7 @@ int ImageSourceAlgo::process() {
         setLastError("imdecode failed (not a valid image?): " + path_);
         return VZ_ERR_PROCESS;
     }
-    image_ = m;
+    image_ = detail::toOutputFormat(m, pixel_format_);
     return VZ_OK;
 #else
     // 非 Windows 平台路径直接当 UTF-8 用
@@ -109,7 +113,7 @@ int ImageSourceAlgo::process() {
         setLastError("imread failed for path: " + path_);
         return VZ_ERR_PROCESS;
     }
-    image_ = m;
+    image_ = detail::toOutputFormat(m, pixel_format_);
     return VZ_OK;
 #endif
 }
@@ -139,7 +143,7 @@ void ImageSourceAlgo::releaseOutput(void* ptr) { detail::safeReleaseOutput(ptr);
 // 描述
 // ============================================================
 const char* ImageSourceAlgo::describe() const {
-    static const char* kDesc = R"({
+    static const char* kDesc = R"DESC({
   "type_id":"ImageSource",
   "display_name":"图像源",
   "category":"源",
@@ -151,9 +155,10 @@ const char* ImageSourceAlgo::describe() const {
   ],
   "parameters":[
     {"name":"path","type":"String","default":"","description":"图片文件路径"},
+    {"name":"pixel_format","type":"String","default":"BGR","description":"输出图像格式","enum":[["BGR","BGR(彩色)"],["Mono8","Mono8(灰度)"],["RGB","RGB"]]},
     {"name":"index","type":"Int","default":0,"min":0,"description":"摄像头索引（保留扩展）"}
   ]
-})";
+})DESC";
     return kDesc;
 }
 

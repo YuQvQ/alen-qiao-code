@@ -24,6 +24,17 @@
       "description": "图片文件路径（空表示待运行时选择）"
     },
     {
+      "name": "pixel_format",
+      "type": "Enum",
+      "default": "BGR",
+      "description": "输出图像格式",
+      "enum": [
+        ["BGR", "BGR(彩色)"],
+        ["Mono8", "Mono8(灰度)"],
+        ["RGB", "RGB"]
+      ]
+    },
+    {
       "name": "index",
       "type": "Int",
       "default": 0,

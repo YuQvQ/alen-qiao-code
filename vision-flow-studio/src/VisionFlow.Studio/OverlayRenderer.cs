@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -223,17 +224,39 @@ public static class OverlayRenderer
                     foreach (var p in ft) AddCross(canvas, p, ptSize, brush);
                 break;
             case "DnnDetect":
-                if (GetRects(node, "boxes", out var boxes))
                 {
-                    string? labels = GetS(node, "labels", out var ls) ? ls : null;
-                    var parts = labels?.Split(',');
-                    for (int i = 0; i < boxes.Length; i++)
+                    // 优先从 detections_json 拿完整数据（含 index/class_id/label/conf/cx/cy/w/h）
+                    bool hasJson = GetS(node, "detections_json", out var dj) && !string.IsNullOrWhiteSpace(dj);
+                    if (hasJson && TryParseDetections(dj, out var dets))
                     {
-                        AddRotRect(canvas, boxes[i], scale, stroke, thick);
-                        if (parts is { Length: > 0 })
-                            AddText(canvas, parts[i % parts.Length],
-                                (boxes[i].x - boxes[i].w / 2) * scale,
-                                (boxes[i].y - boxes[i].h / 2) * scale - 14, brush);
+                        for (int i = 0; i < dets.Count; i++)
+                        {
+                            var d = dets[i];
+                            var rect = new VzRect { x = d.Cx, y = d.Cy, w = d.W, h = d.H, angle = 0 };
+                            AddRotRect(canvas, rect, scale, stroke, thick);
+                            // 中心十字
+                            AddCross(canvas, new VzPoint2D { x = d.Cx, y = d.Cy }, 6, stroke);
+                            // 文本：框的左上方，多行（3 行 × 16px）
+                            double tx = (d.Cx - d.W / 2) * scale;
+                            double ty = (d.Cy - d.H / 2) * scale - 52;
+                            string text = $"#{d.Index} idx:{d.ClassId} {d.Label} conf:{d.Conf:F2}\ncx,cy=({d.Cx:F1},{d.Cy:F1})\nw,h=({d.W:F1},{d.H:F1})";
+                            AddTextBlock(canvas, text, tx, ty, brush);
+                        }
+                    }
+                    else if (GetRects(node, "boxes", out var boxes))
+                    {
+                        // fallback: 只有 boxes + labels（labels 分号分隔）
+                        string? labels = GetS(node, "labels", out var ls) ? ls : null;
+                        string[] parts = labels?.Split(';', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                        for (int i = 0; i < boxes.Length; i++)
+                        {
+                            AddRotRect(canvas, boxes[i], scale, stroke, thick);
+                            AddCross(canvas, new VzPoint2D { x = boxes[i].x, y = boxes[i].y }, 6, stroke);
+                            string lbl = i < parts.Length ? parts[i] : $"cls{i}";
+                            double tx = (boxes[i].x - boxes[i].w / 2) * scale;
+                            double ty = (boxes[i].y - boxes[i].h / 2) * scale - 14;
+                            AddTextBlock(canvas, $"#{i} {lbl}", tx, ty, brush);
+                        }
                     }
                 }
                 break;
@@ -312,6 +335,23 @@ public static class OverlayRenderer
             Foreground = b,
             Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
             Padding = new Thickness(3, 1, 3, 1),
+            IsHitTestVisible = false,
+        };
+        Canvas.SetLeft(tb, x);
+        Canvas.SetTop(tb, y);
+        cv.Children.Add(tb);
+    }
+
+    /// <summary>多行 Canvas TextBlock，用 \n 分隔行。无背景。</summary>
+    private static void AddTextBlock(Canvas cv, string text, double x, double y, Brush fg)
+    {
+        var tb = new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            Foreground = fg,
+            Padding = new Thickness(0),
+            LineHeight = 16,
             IsHitTestVisible = false,
         };
         Canvas.SetLeft(tb, x);
@@ -488,15 +528,35 @@ public static class OverlayRenderer
                     foreach (var p in ft) DrawCross(dc, p, ptSize, brush);
                 break;
             case "DnnDetect":
-                if (GetRects(node, "boxes", out var boxes))
                 {
-                    string? labels = GetS(node, "labels", out var ls) ? ls : null;
-                    var parts = labels?.Split(',');
-                    for (int i = 0; i < boxes.Length; i++)
+                    bool hasJson = GetS(node, "detections_json", out var dj) && !string.IsNullOrWhiteSpace(dj);
+                    if (hasJson && TryParseDetections(dj, out var dets))
                     {
-                        DrawRotRect(dc, boxes[i], pen);
-                        if (parts is { Length: > 0 })
-                            Text(dc, parts[i % parts.Length], boxes[i].x - boxes[i].w / 2, boxes[i].y - boxes[i].h / 2 - 14, brush);
+                        for (int i = 0; i < dets.Count; i++)
+                        {
+                            var d = dets[i];
+                            var rect = new VzRect { x = d.Cx, y = d.Cy, w = d.W, h = d.H, angle = 0 };
+                            DrawRotRect(dc, rect, pen);
+                            DrawCross(dc, new VzPoint2D { x = d.Cx, y = d.Cy }, 6, brush);
+                            double tx = d.Cx - d.W / 2;
+                            double ty = d.Cy - d.H / 2 - 50;
+                            string text = $"#{d.Index} idx:{d.ClassId} {d.Label} conf:{d.Conf:F2}\ncx,cy=({d.Cx:F1},{d.Cy:F1})\nw,h=({d.W:F1},{d.H:F1})";
+                            DrawTextBlock(dc, text, tx, ty, brush);
+                        }
+                    }
+                    else if (GetRects(node, "boxes", out var boxes))
+                    {
+                        string? labels = GetS(node, "labels", out var ls) ? ls : null;
+                        string[] parts = labels?.Split(';', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                        for (int i = 0; i < boxes.Length; i++)
+                        {
+                            DrawRotRect(dc, boxes[i], pen);
+                            DrawCross(dc, new VzPoint2D { x = boxes[i].x, y = boxes[i].y }, 6, brush);
+                            string lbl = i < parts.Length ? parts[i] : $"cls{i}";
+                            double tx = boxes[i].x - boxes[i].w / 2;
+                            double ty = boxes[i].y - boxes[i].h / 2 - 14;
+                            DrawTextBlock(dc, $"#{i} {lbl}", tx, ty, brush);
+                        }
                     }
                 }
                 break;
@@ -579,6 +639,20 @@ public static class OverlayRenderer
         dc.DrawText(ft, new Point(x, y));
     }
 
+    /// <summary>多行 DC 文本：按 \n 拆分逐行绘制。无背景。</summary>
+    private static void DrawTextBlock(DrawingContext dc, string text, double x, double y, Brush fg)
+    {
+        _drew = true;
+        var lines = text.Split('\n');
+        double lineH = 15;
+        for (int li = 0; li < lines.Length; li++)
+        {
+            var ft = new FormattedText(lines[li], CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, Font, 12, fg, 1.0);
+            dc.DrawText(ft, new Point(x, y + lineH * li));
+        }
+    }
+
     // ---------------- 数据读取辅助 ----------------
     private static bool GetPose(Node node, string name, out VzPose2D v)
     {
@@ -622,6 +696,35 @@ public static class OverlayRenderer
     }
     private static int CountOf(Node node)
         => node.OutputCache.TryGetValue("count", out var o) && o is int i ? i : -1;
+
+    /// <summary>DnnDetect detections_json 里单条检测记录。</summary>
+    private sealed record DetInfo(int Index, int ClassId, string Label, double Conf, double Cx, double Cy, double W, double H);
+
+    /// <summary>尝试把 C++ 端输出的 detections_json 解析成强类型列表。</summary>
+    private static bool TryParseDetections(string json, out List<DetInfo> dets)
+    {
+        dets = new List<DetInfo>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return false;
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                int idx = el.TryGetProperty("index", out var ie) ? ie.GetInt32() : dets.Count;
+                int cls = el.TryGetProperty("class_id", out var ce) ? ce.GetInt32() : 0;
+                string lbl = el.TryGetProperty("label", out var le) ? le.GetString() ?? "" : "";
+                double conf = el.TryGetProperty("confidence", out var fe) ? fe.GetDouble() : 0;
+                double cx = el.TryGetProperty("cx", out var xe) ? xe.GetDouble() : 0;
+                double cy = el.TryGetProperty("cy", out var ye) ? ye.GetDouble() : 0;
+                double w = el.TryGetProperty("w", out var we) ? we.GetDouble() : 0;
+                double h = el.TryGetProperty("h", out var he) ? he.GetDouble() : 0;
+                dets.Add(new DetInfo(idx, cls, lbl, conf, cx, cy, w, h));
+            }
+            return dets.Count > 0;
+        }
+        catch { return false; }
+    }
 
     private static Point P(VzPoint2D p) => new(p.x, p.y);
     private static VzPoint2D Mid(VzPoint2D a, VzPoint2D b) => new() { x = (a.x + b.x) / 2, y = (a.y + b.y) / 2 };

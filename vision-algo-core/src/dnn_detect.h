@@ -35,12 +35,15 @@ private:
     // 输出
     struct Det { int classId; double conf; cv::Rect box; };
     std::vector<Det> dets_;
-    std::string out_labels_str_;
+    std::string out_labels_str_;     // 分号分隔类名
+    std::string out_confs_str_;      // 分号分隔置信度
+    std::string out_detections_json_;// 完整JSON数组
     double out_max_conf_ = 0.0;
     cv::Mat result_image_;
     std::vector<std::string> label_names_;
     cv::dnn::Net net_;
     std::string loaded_model_;
     bool net_ready_ = false;
+    bool auto_input_size_ = true;  // ONNX 模型自动探测输入尺寸
 };
 } // namespace vz

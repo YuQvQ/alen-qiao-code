@@ -1,4 +1,4 @@
-// camera_source.cpp — 海康相机源算法实现（stub 版本）
+﻿// camera_source.cpp — 海康相机源算法实现（stub 版本）
 //
 // MVP 说明：
 //   - 真实 MVS SDK 未链接，stub 模式生成测试图；real 模式返回错误。
@@ -31,8 +31,20 @@ int CameraSourceAlgo::setParam(const std::string& key, const std::string& value_
         gain_ = detail::parseJsonDouble(value_json, 0.0);
         return VZ_OK;
     }
+    if (key == "trigger_mode") {
+        trigger_mode_ = detail::parseJsonString(value_json);
+        return VZ_OK;
+    }
+    if (key == "frame_rate") {
+        frame_rate_ = detail::parseJsonDouble(value_json, 0.0);
+        return VZ_OK;
+    }
     if (key == "mode") {
         mode_ = detail::parseJsonString(value_json);
+        return VZ_OK;
+    }
+    if (key == "pixel_format") {
+        pixel_format_ = detail::parseJsonString(value_json);  // BGR / Mono8 / RGB
         return VZ_OK;
     }
     setLastError("unknown parameter: " + key);
@@ -61,11 +73,16 @@ int CameraSourceAlgo::process() {
             setLastError("real 模式需要先在参数中选择设备序列号（点击参数对话框的「枚举相机」）");
             return VZ_ERR_INVALID_ARG;
         }
-        if (!hik::grabOneFrame(device_sn_, exposure_, gain_, frame, err)) {
+        hik::GrabParams gp;
+        gp.exposure_us  = exposure_;
+        gp.gain_db      = gain_;
+        gp.trigger_mode = trigger_mode_;
+        gp.frame_rate   = frame_rate_;
+        if (!hik::grabOneFrame(device_sn_, gp, frame, err)) {
             setLastError("相机采集失败: " + err);
             return VZ_ERR_PROCESS;
         }
-        image_ = frame;
+        image_ = detail::toOutputFormat(frame, pixel_format_);
         setLastError("");
         return VZ_OK;
     }
@@ -91,7 +108,7 @@ int CameraSourceAlgo::process() {
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
     }
 
-    image_ = m;
+    image_ = detail::toOutputFormat(m, pixel_format_);
     // stub 模式留 warning，但不返回错误码（节点不应变红）
     setLastError("");
     return VZ_OK;
@@ -121,7 +138,7 @@ void CameraSourceAlgo::releaseOutput(void* ptr) { detail::safeReleaseOutput(ptr)
 // 描述
 // ============================================================
 const char* CameraSourceAlgo::describe() const {
-    static const char* kDesc = R"({
+    static const char* kDesc = R"DESC({
   "type_id":"CameraSource",
   "display_name":"海康相机",
   "category":"源",
@@ -135,9 +152,13 @@ const char* CameraSourceAlgo::describe() const {
     {"name":"device_sn","type":"String","default":"","description":"设备序列号"},
     {"name":"exposure","type":"Double","default":10000.0,"min":0,"description":"曝光（微秒）"},
     {"name":"gain","type":"Double","default":0.0,"min":0,"description":"增益（dB）"},
-    {"name":"mode","type":"String","default":"stub","description":"stub=测试图 / real=真实采集（需 MVS SDK）"}
+    {"name":"trigger_mode","type":"String","default":"off","description":"触发模式",
+     "enum":[["off","连续采集"],["software","软触发"],["line1","硬触发 Line1"],["line2","硬触发 Line2"],["line3","硬触发 Line3"]]},
+    {"name":"frame_rate","type":"Double","default":0,"min":0,"description":"帧率 fps（0=不修改，仅连续采集模式生效）"},
+    {"name":"mode","type":"String","default":"stub","description":"stub=测试图 / real=真实采集（需 MVS SDK）"},
+    {"name":"pixel_format","type":"String","default":"BGR","description":"输出图像格式","enum":[["BGR","BGR(彩色)"],["Mono8","Mono8(灰度)"],["RGB","RGB"]]}
   ]
-})";
+})DESC";
     return kDesc;
 }
 

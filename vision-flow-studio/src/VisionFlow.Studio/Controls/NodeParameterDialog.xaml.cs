@@ -213,7 +213,7 @@ public partial class NodeParameterDialog : Window
                 row.Children.Add(browseBtn);
             }
 
-            // 相机节点的 device_sn：提供「枚举相机」下拉，无需手填序列号
+            // 相机节点的 device_sn：提供「枚举相机」下拉 +「IP 配置」，无需手填序列号
             if (p.Name == "device_sn")
             {
                 var enumBtn = new Button
@@ -229,13 +229,28 @@ public partial class NodeParameterDialog : Window
                     Margin = new Thickness(0, 4, 0, 0),
                     Visibility = Visibility.Collapsed,
                 };
+                var ipBtn = new Button
+                {
+                    Content = "IP 配置...",
+                    Padding = new Thickness(8, 2, 8, 2),
+                    Margin = new Thickness(0, 4, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Visibility = Visibility.Collapsed,
+                };
+                VzAlgoInterop.CameraDevice? selectedCam = null;
+                var camList = new List<VzAlgoInterop.CameraDevice>();
                 var snBox = box;
+
                 enumBtn.Click += (s, _) =>
                 {
                     var cams = VzAlgoInterop.EnumCameras(out var err);
+                    camList.Clear();
+                    camList.AddRange(cams);
                     camCombo.Items.Clear();
                     if (cams.Count == 0)
                     {
+                        camCombo.Visibility = Visibility.Collapsed;
+                        ipBtn.Visibility = Visibility.Collapsed;
                         MessageBox.Show(this,
                             err is null ? "未发现在线相机（请检查相机连接/供电/网卡）" : $"枚举失败：{err}",
                             "枚举相机", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -244,8 +259,8 @@ public partial class NodeParameterDialog : Window
                     foreach (var c in cams)
                         camCombo.Items.Add(new ComboBoxItem { Content = c.Display, Tag = c.Sn });
                     camCombo.Visibility = Visibility.Visible;
-                    if (camCombo.Items.Count > 0)
-                        camCombo.SelectedIndex = 0;
+                    ipBtn.Visibility = Visibility.Visible;
+                    camCombo.SelectedIndex = 0;
                 };
                 camCombo.SelectionChanged += (s, _) =>
                 {
@@ -253,10 +268,13 @@ public partial class NodeParameterDialog : Window
                     {
                         if (snBox is not null) snBox.Text = sn;
                         Node.Parameters["device_sn"] = sn;
+                        selectedCam = camList.FirstOrDefault(c => c.Sn == sn);
                     }
                 };
+                ipBtn.Click += (s, _) => ShowCameraIpDialog(selectedCam, snBox?.Text ?? "");
                 row.Children.Add(enumBtn);
                 row.Children.Add(camCombo);
+                row.Children.Add(ipBtn);
             }
 
             ParamPanel.Children.Add(row);
@@ -264,6 +282,91 @@ public partial class NodeParameterDialog : Window
 
         AddTcpControls();
         AddThresholdAssist();
+    }
+
+    /// <summary>相机 IP 配置小对话框：显示当前 IP，允许强制修改 GigE 相机的 IP/掩码/网关。</summary>
+    private void ShowCameraIpDialog(VzAlgoInterop.CameraDevice? cam, string snFallback)
+    {
+        var dlg = new Window
+        {
+            Title = "相机 IP 配置（GigE）",
+            Width = 420,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            ResizeMode = ResizeMode.NoResize,
+        };
+        var panel = new StackPanel { Margin = new Thickness(16) };
+
+        var info = new TextBlock
+        {
+            Text = cam is null
+                ? $"SN: {snFallback}\n（未枚举到相机信息，请先枚举相机；USB 相机不支持 IP 配置）"
+                : cam.DisplayLong,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 10),
+            Foreground = (System.Windows.Media.Brush)Application.Current.TryFindResource("TextMutedBrush")!,
+        };
+        panel.Children.Add(info);
+
+        TextBox MakeField(string label, string value)
+        {
+            panel.Children.Add(new TextBlock { Text = label, FontSize = 12, Margin = new Thickness(0, 4, 0, 2) });
+            var tb = new TextBox { Text = value, Padding = new Thickness(4, 2, 4, 2) };
+            panel.Children.Add(tb);
+            return tb;
+        }
+
+        var ipBox      = MakeField("新 IP 地址",      cam?.Ip      is { Length: > 0 } i  ? i  : "192.168.1.100");
+        var maskBox    = MakeField("子网掩码",        cam?.Subnet  is { Length: > 0 } sm ? sm : "255.255.255.0");
+        var gwBox      = MakeField("默认网关",        cam?.Gateway is { Length: > 0 } gw ? gw : "192.168.1.1");
+
+        var hint = new TextBlock
+        {
+            Text = "强制 IP 不需要打开相机；用于相机与主机不同网段时救砖。修改后相机立即切换，需重新枚举。\n" +
+                   "注意：新 IP 需与本机网卡同网段才能通讯（如网卡 192.168.1.5 → 相机 192.168.1.x）。",
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = System.Windows.Media.Brushes.Gray,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        panel.Children.Add(hint);
+
+        var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        var okBtn = new Button { Content = "应用", Padding = new Thickness(16, 4, 16, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancelBtn = new Button { Content = "取消", Padding = new Thickness(16, 4, 16, 4) };
+        btnRow.Children.Add(okBtn);
+        btnRow.Children.Add(cancelBtn);
+        panel.Children.Add(btnRow);
+        dlg.Content = panel;
+
+        okBtn.Click += (_, _) =>
+        {
+            string sn = cam?.Sn ?? snFallback;
+            if (string.IsNullOrEmpty(sn))
+            {
+                MessageBox.Show(dlg, "没有相机 SN，请先「枚举相机」选择设备", "IP 配置",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            string ip = ipBox.Text.Trim(), mask = maskBox.Text.Trim(), gw = gwBox.Text.Trim();
+            if (VzAlgoInterop.ForceCameraIp(sn, ip, mask, gw, out var err))
+            {
+                MessageBox.Show(dlg,
+                    $"IP 已下发成功：{ip}\n\n请重新「枚举相机」确认新 IP 生效。",
+                    "IP 配置", MessageBoxButton.OK, MessageBoxImage.Information);
+                dlg.Close();
+            }
+            else
+            {
+                MessageBox.Show(dlg, $"IP 配置失败：{err}", "IP 配置",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        };
+        cancelBtn.Click += (_, _) => dlg.Close();
+
+        dlg.ShowDialog();
     }
 
     /// <summary>模板匹配节点：追加“分析推荐阈值”按钮，自动根据分数分布推荐 threshold。</summary>

@@ -1,0 +1,15 @@
+{
+  "type_id": "MakePoint2D",
+  "display_name": "生成坐标点",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "", "algo_name": "MakePoint2D" },
+  "inputs": [
+    { "name": "x", "type": "Double", "required": false, "description": "X坐标" },
+    { "name": "y", "type": "Double", "required": false, "description": "Y坐标" }
+  ],
+  "outputs": [
+    { "name": "points", "type": "Point2DList", "required": true, "description": "坐标点(单点列表)" }
+  ],
+  "parameters": []
+}

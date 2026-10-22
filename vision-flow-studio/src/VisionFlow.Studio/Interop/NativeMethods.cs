@@ -68,6 +68,14 @@ internal static class NativeMethods
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr vz_enum_cameras();
 
+    // === GigE 相机强制 IP 配置 ===
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int vz_camera_force_ip(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string sn,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string ip,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string netmask,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string gateway);
+
     // === 连线路由（正交 / 可拐弯 / 绕开节点）===
     // obstacles: 每节点 4 个 double [x,y,w,h]，obstacles 长度 = obstacleCount*4
     // outPoints: 缓冲，每点 2 个 double；maxPoints 为点数容量

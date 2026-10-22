@@ -202,6 +202,23 @@ public sealed class VzAlgoInterop : IDisposable
         finally { Marshal.FreeHGlobal(ptr); }
     }
 
+    /// <summary>写入 CoordSys(3x3 坐标系矩阵) 输入端口。C 端在 setInput 内拷贝结构。</summary>
+    public void SetInputCoordSys(string portName, VzCoordSystem3x3 cs)
+    {
+        IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf<VzCoordSystem3x3>());
+        try
+        {
+            Marshal.StructureToPtr(cs, ptr, false);
+            var rc = NativeMethods.vz_algo_set_input(_ctx, portName,
+                                                     ptr, (int)VzPortType.CoordSys);
+            ThrowIfFailed(rc, $"set_input({portName}:CoordSys)");
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
+
     // ============================================================
     // 执行
     // ============================================================
@@ -304,6 +321,15 @@ public sealed class VzAlgoInterop : IDisposable
         finally { NativeMethods.vz_free(ptr); }
     }
 
+    /// <summary>获取 CoordSys(3x3 坐标系矩阵) 输出。</summary>
+    public VzCoordSystem3x3 GetOutputCoordSys(string portName)
+    {
+        var (ptr, count, _) = GetRawOutput(portName);
+        if (ptr == IntPtr.Zero) return VzCoordSystem3x3.Identity();
+        try { return Marshal.PtrToStructure<VzCoordSystem3x3>(ptr); }
+        finally { NativeMethods.vz_free(ptr); }
+    }
+
     /// <summary>
     /// 获取输出图像（VzImage 结构）。返回的 .data 内存由 caller 负责 vz_free 释放。
     /// 简化：返回 VzImage 拷贝 + 原始 data 指针，调用方调 Dispose 输出对象释放。
@@ -377,12 +403,20 @@ public sealed class VzAlgoInterop : IDisposable
         public string Vendor { get; set; } = "";
         public string Type { get; set; } = "";
         public string UserName { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public string Subnet { get; set; } = "";
+        public string Gateway { get; set; } = "";
         public string Display => $"{Type} | {Model} | SN:{Sn}"
-                                  + (string.IsNullOrEmpty(UserName) ? "" : $" ({UserName})");
+                                  + (string.IsNullOrEmpty(UserName) ? "" : $" ({UserName})")
+                                  + (string.IsNullOrEmpty(Ip) ? "" : $" | IP:{Ip}");
+        public string DisplayLong => $"{Type} | {Model} | SN:{Sn}"
+                                  + (string.IsNullOrEmpty(UserName) ? "" : $" ({UserName})")
+                                  + (string.IsNullOrEmpty(Ip) ? "" : $"\nIP: {Ip}   掩码: {Subnet}   网关: {Gateway}");
     }
 
     private class CameraDeviceDto { public string sn { get; set; } = ""; public string model { get; set; } = "";
-        public string vendor { get; set; } = ""; public string type { get; set; } = ""; public string user_name { get; set; } = ""; }
+        public string vendor { get; set; } = ""; public string type { get; set; } = ""; public string user_name { get; set; } = "";
+        public string ip { get; set; } = ""; public string subnet { get; set; } = ""; public string gateway { get; set; } = ""; }
 
     /// <summary>枚举当前在线的海康相机。失败返回空列表（错误见 out 文本）。</summary>
     public static List<CameraDevice> EnumCameras(out string? error)
@@ -396,6 +430,7 @@ public sealed class VzAlgoInterop : IDisposable
             {
                 Sn = d.sn ?? "", Model = d.model ?? "", Vendor = d.vendor ?? "",
                 Type = d.type ?? "", UserName = d.user_name ?? "",
+                Ip = d.ip ?? "", Subnet = d.subnet ?? "", Gateway = d.gateway ?? "",
             }).ToList();
         }
         catch (Exception ex)
@@ -403,6 +438,19 @@ public sealed class VzAlgoInterop : IDisposable
             error = ex.Message;
             return new List<CameraDevice>();
         }
+    }
+
+    /// <summary>强制修改 GigE 相机 IP。成功返回 true，失败 error 返回原因。</summary>
+    public static bool ForceCameraIp(string sn, string ip, string netmask, string gateway, out string? error)
+    {
+        error = null;
+        var rc = NativeMethods.vz_camera_force_ip(sn, ip, netmask, gateway);
+        if (rc != 0)
+        {
+            error = PtrToUtf8(NativeMethods.vz_algo_last_error(IntPtr.Zero)) ?? $"错误码 0x{rc:X}";
+            return false;
+        }
+        return true;
     }
 
     // ============================================================

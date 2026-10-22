@@ -41,10 +41,13 @@ public:
 
 private:
     std::string device_sn_;
-    double      exposure_ = 10000.0; // 微秒
-    double      gain_     = 0.0;     // dB
-    std::string mode_     = "stub";  // stub / real
-    cv::Mat     image_;              // 采集到的图像
+    double      exposure_     = 10000.0; // 微秒
+    double      gain_         = 0.0;     // dB
+    std::string trigger_mode_ = "off";   // off / software / line1 / line2 / line3
+    double      frame_rate_   = 0.0;     // <=0 表示不改帧率
+    std::string mode_         = "stub";  // stub / real
+    std::string pixel_format_ = "BGR";   // 输出格式: BGR / Mono8 / RGB
+    cv::Mat     image_;                  // 采集到的图像
 };
 
 } // namespace vz

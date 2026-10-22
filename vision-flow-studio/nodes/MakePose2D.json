@@ -1,0 +1,16 @@
+{
+  "type_id": "MakePose2D",
+  "display_name": "生成位姿",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "", "algo_name": "MakePose2D" },
+  "inputs": [
+    { "name": "x", "type": "Double", "required": false, "description": "X坐标" },
+    { "name": "y", "type": "Double", "required": false, "description": "Y坐标" },
+    { "name": "angle", "type": "Double", "required": false, "description": "角度(度)" }
+  ],
+  "outputs": [
+    { "name": "pose", "type": "Pose2D", "required": true, "description": "位姿(x,y,角度)" }
+  ],
+  "parameters": []
+}

@@ -21,7 +21,7 @@
       "name": "device_sn",
       "type": "String",
       "default": "",
-      "description": "设备序列号（MVS SDK 模式下生效）"
+      "description": "设备序列号（MVS SDK 模式下生效，可用「枚举相机」选择）"
     },
     {
       "name": "exposure",
@@ -38,10 +38,41 @@
       "description": "增益（dB）"
     },
     {
+      "name": "trigger_mode",
+      "type": "String",
+      "default": "off",
+      "description": "触发模式",
+      "enum": [
+        ["off", "连续采集"],
+        ["software", "软触发"],
+        ["line1", "硬触发 Line1"],
+        ["line2", "硬触发 Line2"],
+        ["line3", "硬触发 Line3"]
+      ]
+    },
+    {
+      "name": "frame_rate",
+      "type": "Double",
+      "default": 0,
+      "min": 0,
+      "description": "帧率 fps（0=不修改，仅连续采集模式生效）"
+    },
+    {
       "name": "mode",
       "type": "String",
       "default": "stub",
       "description": "stub=测试图 / real=真实采集（需 MVS SDK）"
+    },
+    {
+      "name": "pixel_format",
+      "type": "Enum",
+      "default": "BGR",
+      "description": "输出图像格式",
+      "enum": [
+        ["BGR", "BGR(彩色)"],
+        ["Mono8", "Mono8(灰度)"],
+        ["RGB", "RGB"]
+      ]
     }
   ]
 }

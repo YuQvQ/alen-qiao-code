@@ -26,6 +26,7 @@ public static class TypeRegistry
         Register(new PortType("String",      isList: false, isScalar: true,  category: "Scalar"));
         Register(new PortType("Pose2D",      isList: false, isScalar: false, category: "Geometry"));
         Register(new PortType("DoubleRange", isList: false, isScalar: false, category: "Scalar"));
+        Register(new PortType("CoordSys",    isList: false, isScalar: false, category: "Geometry"));
 
         // === 列表 ===
         Register(new PortType("MatchResultList", isList: true, isScalar: false, category: "Result"));

@@ -2,6 +2,10 @@
 #include "distance_transform.h"
 #include "algo_utils.h"
 #include <opencv2/imgproc.hpp>
+// OpenCV 5 移除了 DIST_L2 常量，手动定义（DIST_L2 = 2 = 欧氏距离）
+#ifndef DIST_L2
+  #define DIST_L2 2
+#endif
 namespace vz {
 using detail::parseJsonInt; using detail::toCvMat; using detail::toVzImage;
 int DistanceTransformAlgo::setParam(const std::string& k, const std::string& v) {
@@ -15,7 +19,7 @@ int DistanceTransformAlgo::setInput(const std::string& p, const void* d, int t) 
 int DistanceTransformAlgo::process() {
     if (input_.empty()) { setLastError("no input image"); return VZ_ERR_PROCESS; }
     cv::Mat gray; if (input_.channels() == 1) gray = input_; else cv::cvtColor(input_, gray, cv::COLOR_BGR2GRAY);
-    cv::Mat dist; cv::distanceTransform(gray, dist, cv::DIST_L2, mask_size_);
+    cv::Mat dist; cv::distanceTransform(gray, dist, DIST_L2, mask_size_);
     double mx; cv::minMaxLoc(dist, nullptr, &mx);
     max_dist_ = mx;
     if (mx > 0) dist.convertTo(output_, CV_8U, 255.0 / mx); else output_ = cv::Mat::zeros(gray.size(), CV_8U);

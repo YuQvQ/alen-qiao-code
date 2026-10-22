@@ -1,0 +1,17 @@
+{
+  "type_id": "MathCalc",
+  "display_name": "四则运算",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "", "algo_name": "MathCalc" },
+  "inputs": [
+    { "name": "a", "type": "Double", "required": false, "description": "操作数a" },
+    { "name": "b", "type": "Double", "required": false, "description": "操作数b" }
+  ],
+  "outputs": [
+    { "name": "value", "type": "Double", "required": true, "description": "a op b 的结果" }
+  ],
+  "parameters": [
+    { "name": "op", "type": "Enum", "default": "+", "options": [ [ "+", "加(+)" ], [ "-", "减(-)" ], [ "*", "乘(*)" ], [ "/", "除(/)" ], [ "%", "取余(%)" ] ], "description": "运算符" }
+  ]
+}

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Windows.Media;
 
 namespace VisionFlow.Studio.Execution;
@@ -65,6 +66,40 @@ public sealed class Logger : INotifyPropertyChanged
     public static Logger Instance { get; } = new Logger();
 
     private readonly ObservableCollection<LogEntry> _entries = new();
+
+    // ===== 本地文件落盘 =====
+    private static readonly string LogDir = Path.Combine(AppContext.BaseDirectory, "logs");
+    private static string _logFilePath = "";
+    private static StreamWriter? _logWriter;
+    private static readonly object _fileLock = new();
+
+    private static string EnsureLogFile()
+    {
+        var today = DateTime.Now.ToString("yyyyMMdd");
+        var newPath = Path.Combine(LogDir, $"vision-flow-studio_{today}.log");
+        if (newPath == _logFilePath && _logWriter is not null) return _logFilePath;
+        try
+        {
+            lock (_fileLock)
+            {
+                if (!Directory.Exists(LogDir)) Directory.CreateDirectory(LogDir);
+                _logWriter?.Dispose();
+                _logWriter = new StreamWriter(newPath, append: true,
+                    System.Text.Encoding.UTF8) { AutoFlush = true };
+                _logFilePath = newPath;
+                _logWriter.WriteLine($"===== Session started {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} =====");
+            }
+        }
+        catch { }
+        return _logFilePath;
+    }
+
+    private static void WriteToFile(LogEntry entry)
+    {
+        try { EnsureLogFile(); lock (_fileLock) { _logWriter?.WriteLine(entry.DisplayText); } }
+        catch { }
+    }
+
     /// <summary>UI 可绑定的日志集合</summary>
     public ObservableCollection<LogEntry> Entries => _entries;
 
@@ -102,8 +137,8 @@ public sealed class Logger : INotifyPropertyChanged
             Message = message ?? "",
         };
         _totalCount++;
-        // 触发事件：让 UI 订阅者在自己的线程切回 UI 线程
-        LogAppended?.Invoke(entry);
+        WriteToFile(entry);                     // 同步落盘
+        LogAppended?.Invoke(entry);             // UI 事件
     }
 
     // ============================================================
@@ -121,5 +156,11 @@ public sealed class Logger : INotifyPropertyChanged
         _entries.Clear();
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TotalCount)));
         Append(LogLevel.Info, "Logger", "日志面板已清空");
+    }
+
+    /// <summary>应用退出时释放文件句柄（可选）。</summary>
+    public static void CloseFile()
+    {
+        lock (_fileLock) { try { _logWriter?.Dispose(); } catch { } _logWriter = null; }
     }
 }

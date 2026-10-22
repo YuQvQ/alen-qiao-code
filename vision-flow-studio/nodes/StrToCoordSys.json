@@ -1,0 +1,16 @@
+{
+  "type_id": "StrToCoordSys",
+  "display_name": "String转坐标系",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "vision_algo", "algo_name": "StrToCoordSys" },
+  "inputs": [
+    { "name": "value", "type": "String", "required": false, "description": "矩阵字符串 [a,b,c,d,e,f,g,h,i]（行优先9个数）" }
+  ],
+  "outputs": [
+    { "name": "coord", "type": "CoordSys", "required": true, "description": "3x3坐标系矩阵" }
+  ],
+  "parameters": [
+    { "name": "value", "type": "String", "default": "[1,0,0,0,1,0,0,0,1]", "description": "默认矩阵字符串(端口未连线时使用)" }
+  ]
+}

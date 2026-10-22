@@ -328,7 +328,41 @@ public partial class NodeCanvas : Canvas
         SetTop(ctrl, node.Y);
         SetZIndex(ctrl, 10);
         _nodeCtrls[node] = ctrl;
+        // 拖拽落点居中：等控件量出实际尺寸后，把节点中心对齐到鼠标落点
+        if (_pendingCenter.TryGetValue(node, out var pc))
+        {
+            RoutedEventHandler onLoaded = null!;
+            onLoaded = (s, e) =>
+            {
+                ctrl.Loaded -= onLoaded;
+                ApplyPendingCenter(node);
+            };
+            ctrl.Loaded += onLoaded;
+        }
         // 新节点可能挡住已有连线 -> 全部重新绕障
+        RebuildAllEdges();
+    }
+
+    // 待居中的节点 → 内容坐标落点
+    private readonly Dictionary<Node, Point> _pendingCenter = new();
+
+    /// <summary>拖拽创建后，把节点中心对齐到内容坐标 contentPos（控件量出尺寸后生效）。</summary>
+    public void QueueCenterOnDrop(Node node, Point contentPos)
+    {
+        _pendingCenter[node] = contentPos;
+        ApplyPendingCenter(node);
+    }
+
+    private void ApplyPendingCenter(Node node)
+    {
+        if (!_pendingCenter.TryGetValue(node, out var pos)) return;
+        if (!_nodeCtrls.TryGetValue(node, out var ctrl)) return;
+        if (ctrl.ActualWidth <= 0 || double.IsNaN(ctrl.ActualWidth)) return; // 尚未量出尺寸，等 Loaded
+        _pendingCenter.Remove(node);
+        node.X = pos.X - ctrl.ActualWidth / 2;
+        node.Y = pos.Y - ctrl.ActualHeight / 2;
+        SetLeft(ctrl, node.X);
+        SetTop(ctrl, node.Y);
         RebuildAllEdges();
     }
 

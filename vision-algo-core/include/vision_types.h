@@ -72,6 +72,16 @@ typedef struct VzPose2D {
 } VzPose2D;
 
 // ============================================================
+// 坐标系 / 3x3 变换矩阵（行优先，默认单位阵）
+//   [ m[0] m[1] m[2] ]
+//   [ m[3] m[4] m[5] ]
+//   [ m[6] m[7] m[8] ]
+// ============================================================
+typedef struct VzCoordSystem3x3 {
+    double m[9];
+} VzCoordSystem3x3;
+
+// ============================================================
 // 模板匹配结果
 // ============================================================
 typedef struct VzMatchResult {
@@ -133,6 +143,7 @@ typedef enum VzPortType {
     VZ_TYPE_STRING        = 9,
     VZ_TYPE_POSE2D       = 10,
     VZ_TYPE_DOUBLE_RANGE  = 11,
+    VZ_TYPE_COORD_SYS    = 12,   // VzCoordSystem3x3（坐标系/3x3矩阵）
 } VzPortType;
 
 // ============================================================

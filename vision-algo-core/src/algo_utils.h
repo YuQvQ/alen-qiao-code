@@ -193,6 +193,27 @@ inline cv::Mat toDrawCanvas(const cv::Mat& input) {
     return out;
 }
 
+// 把内部 BGR 图像转成用户选择的输出格式。
+//   "BGR"(默认) / "Mono8"(单通道灰度) / "RGB"
+// 注意：下游算法节点都按 BGR 或灰度处理；选择 RGB 后颜色检测类节点需自行换算。
+inline cv::Mat toOutputFormat(const cv::Mat& bgr, const std::string& fmt) {
+    if (bgr.empty()) return bgr;
+    std::string f = fmt;
+    for (auto& ch : f) ch = (char)std::toupper((unsigned char)ch);
+    if (f == "MONO8" || f == "GRAY" || f == "灰度") {
+        if (bgr.channels() == 1) return bgr.clone();
+        cv::Mat g;
+        cv::cvtColor(bgr, g, cv::COLOR_BGR2GRAY);
+        return g;
+    }
+    if (f == "RGB") {
+        cv::Mat rgb;
+        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+        return rgb;
+    }
+    return bgr.clone(); // BGR / 其他 → 原样
+}
+
 // ============================================================
 // VzImage <-> cv::Mat 互转
 // ============================================================

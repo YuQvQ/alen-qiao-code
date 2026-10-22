@@ -1,0 +1,14 @@
+{
+  "type_id": "RadToDeg",
+  "display_name": "弧度转角度",
+  "category": "工具",
+  "icon": "icons/convert.svg",
+  "algo_binding": { "dll": "", "algo_name": "RadToDeg" },
+  "inputs": [
+    { "name": "value", "type": "Double", "required": false, "description": "弧度值" }
+  ],
+  "outputs": [
+    { "name": "value", "type": "Double", "required": true, "description": "角度值(度)" }
+  ],
+  "parameters": []
+}

@@ -7,16 +7,18 @@
   "outputs": [
     { "name": "result_image", "type": "Image", "required": true, "description": "绘制检测框的结果图" },
     { "name": "count", "type": "Int", "required": true, "description": "检测数" },
-    { "name": "boxes", "type": "RectList", "required": true, "description": "检测框列表" },
+    { "name": "boxes", "type": "RectList", "required": true, "description": "检测框列表(中心XY+宽高)" },
     { "name": "max_confidence", "type": "Double", "required": true, "description": "最高置信度" },
-    { "name": "labels", "type": "String", "required": true, "description": "标签(逗号分隔)" }
+    { "name": "labels", "type": "String", "required": true, "description": "标签(分号分隔)" },
+    { "name": "confidences", "type": "String", "required": false, "description": "每框置信度(分号分隔)" },
+    { "name": "detections_json", "type": "String", "required": false, "description": "完整检测结果JSON" }
   ],
   "parameters": [
     { "name": "model", "type": "String", "default": "", "description": "模型路径" },
     { "name": "config", "type": "String", "default": "", "description": "配置文件(可选)" },
     { "name": "framework", "type": "Int", "default": 0, "description": "框架", "enum": [[0, "自动"], [1, "Caffe"], [2, "TensorFlow"], [3, "Darknet"], [4, "ONNX"]] },
-    { "name": "input_w", "type": "Int", "default": 416, "description": "输入宽" },
-    { "name": "input_h", "type": "Int", "default": 416, "description": "输入高" },
+    { "name": "input_w", "type": "Int", "default": 640, "description": "输入宽(ONNX模型自动探测,YOLO用640)" },
+    { "name": "input_h", "type": "Int", "default": 640, "description": "输入高(ONNX模型自动探测,YOLO用640)" },
     { "name": "scale", "type": "Double", "default": 0.00392156, "description": "像素缩放" },
     { "name": "mean_r", "type": "Double", "default": 0, "description": "均值R" },
     { "name": "mean_g", "type": "Double", "default": 0, "description": "均值G" },

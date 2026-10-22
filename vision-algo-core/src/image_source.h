@@ -35,6 +35,7 @@ public:
 
 private:
     std::string path_;      // 文件路径
+    std::string pixel_format_ = "BGR";  // 输出格式: BGR / Mono8 / RGB
     int         index_ = 0; // 摄像头索引（保留）
     cv::Mat     image_;     // 加载后的图像
 };

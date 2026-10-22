@@ -136,7 +136,8 @@ public sealed class DagEngine
                 // 托管节点（C# 端执行，不走 C++ interop）：ForLoop / TCP 服务端 / 客户端 / PointSort
                 if (node.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
                     or "ConstString" or "ConstNumber" or "ConstInteger"
-                    or "TypeConvert" or "SaveData")
+                    or "TypeConvert" or "SaveData"
+                    or "DegToRad" or "RadToDeg" or "MathCalc" or "MakePoint2D" or "MakePose2D")
                 {
                     results.Add(RunManagedNode(node, iter));
                     continue;
@@ -272,6 +273,76 @@ public sealed class DagEngine
                             System.Globalization.CultureInfo.InvariantCulture, out iv);
                     node.OutputCache["value"] = iv;
                     Logger.Info("DagEngine", $"  ConstInteger = {iv}");
+                    break;
+                }
+                case "DegToRad" or "RadToDeg":
+                {
+                    // 数值端口 → double：支持上游 Double 输出或字符串数值
+                    double v = 0;
+                    var raw = GetInputValue(node, "value");
+                    if (raw is double d) v = d;
+                    else if (raw is not null)
+                        double.TryParse(raw.ToString(), System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out v);
+                    double outv = node.AlgoName == "DegToRad" ? v * Math.PI / 180.0 : v * 180.0 / Math.PI;
+                    node.OutputCache["value"] = outv;
+                    Logger.Info("DagEngine", $"  {node.AlgoName}: {v:G6} → {outv:G6}");
+                    break;
+                }
+                case "MathCalc":
+                {
+                    double A(double fb)
+                    {
+                        var r = GetInputValue(node, fb == 0 ? "a" : "b");
+                        if (r is double d) return d;
+                        if (r is not null && double.TryParse(r.ToString(), System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out var dv)) return dv;
+                        return 0;
+                    }
+                    double a = A(0), b = A(1);
+                    string op = P(node, "op", "+");
+                    double res = op switch
+                    {
+                        "-" => a - b,
+                        "*" => a * b,
+                        "/" => Math.Abs(b) < 1e-12 ? 0 : a / b,
+                        "%" => Math.Abs(b) < 1e-12 ? 0 : a % b,
+                        _ => a + b,
+                    };
+                    node.OutputCache["value"] = res;
+                    node.OutputCache["a"] = a;
+                    node.OutputCache["b"] = b;
+                    Logger.Info("DagEngine", $"  MathCalc: {a:G6} {op} {b:G6} = {res:G6}");
+                    break;
+                }
+                case "MakePoint2D":
+                {
+                    double Px(double fb)
+                    {
+                        var r = GetInputValue(node, fb == 0 ? "x" : "y");
+                        if (r is double d) return d;
+                        if (r is not null && double.TryParse(r.ToString(), System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out var dv)) return dv;
+                        return 0;
+                    }
+                    var pt = new VzPoint2D { x = Px(0), y = Px(1) };
+                    node.OutputCache["points"] = new[] { pt };
+                    Logger.Info("DagEngine", $"  MakePoint2D: ({pt.x:G6}, {pt.y:G6})");
+                    break;
+                }
+                case "MakePose2D":
+                {
+                    double Px2(string port)
+                    {
+                        var r = GetInputValue(node, port);
+                        if (r is double d) return d;
+                        if (r is not null && double.TryParse(r.ToString(), System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out var dv)) return dv;
+                        return 0;
+                    }
+                    var pose = new VzPose2D { point = new VzPoint2D { x = Px2("x"), y = Px2("y") }, angle = Px2("angle") };
+                    node.OutputCache["pose"] = pose;
+                    Logger.Info("DagEngine", $"  MakePose2D: ({pose.point.x:G6}, {pose.point.y:G6}, {pose.angle:G6}°)");
                     break;
                 }
                 case "PointSort":
@@ -707,7 +778,8 @@ public sealed class DagEngine
             }
             if (n.AlgoName is "ForLoop" or "TcpServer" or "TcpClient" or "If" or "PointSort"
                 or "ConstString" or "ConstNumber" or "ConstInteger"
-                or "TypeConvert" or "SaveData")
+                or "TypeConvert" or "SaveData"
+                or "DegToRad" or "RadToDeg" or "MathCalc" or "MakePoint2D" or "MakePose2D")
             {
                 results.Add(RunManagedNode(n, 0));
                 continue;
@@ -907,6 +979,14 @@ public sealed class DagEngine
                 interop.SetInputPose(port.Name, pose);
                 break;
             }
+            case "CoordSys":
+            {
+                if (data is not VzCoordSystem3x3 cs)
+                    throw new InvalidOperationException(
+                        $"input '{port.Name}' expects CoordSys, got {data.GetType().Name}");
+                interop.SetInputCoordSys(port.Name, cs);
+                break;
+            }
             case "Int":
             {
                 int v = data switch
@@ -965,6 +1045,7 @@ public sealed class DagEngine
             "Bool"            => interop.GetOutputBool(port.Name),
             "String"          => interop.GetOutputString(port.Name),
             "Pose2D"          => interop.GetOutputPose(port.Name),
+            "CoordSys"        => interop.GetOutputCoordSys(port.Name),
             _ => throw new NotSupportedException(
                     $"output type '{port.Type.Name}' not supported by DagEngine"),
         };
